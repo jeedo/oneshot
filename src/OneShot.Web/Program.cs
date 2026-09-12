@@ -5,6 +5,7 @@ using OneShot.Web.Security;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel(KestrelHardening.Apply);
+LoggingHardening.Apply(builder.Logging);
 
 builder.Services.AddRazorPages();
 builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();

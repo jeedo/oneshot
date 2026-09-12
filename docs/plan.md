@@ -35,7 +35,7 @@ one branch, written tests-first (red → green).
 - [x] 3. Wire the bundle into the Razor layout with a build-time SHA-256 that feeds both the `integrity` attribute and the CSP `script-src` hash; fail the build if the recorded hash is stale. (T7)
 - [x] 4. Add the security-headers middleware: HSTS (1 year, preload), HTTPS redirection, `Cache-Control: no-store` + `Pragma: no-cache` on `/`, `/s/*`, `/api/*`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, deny-all `Permissions-Policy`, and CSP `default-src 'none'; script-src 'sha256-…'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. (T7, T8)
 - [x] 5. Harden Kestrel: `AddServerHeader = false`, TLS 1.2+ only, `MaxRequestBodySize` 128 KiB, header size/count limits, request/keep-alive timeouts, and `UseEphemeralDataProtectionProvider()` so no key ring is ever written to disk. (T5, T13)
-- [ ] 6. Configure logging: JSON console output, framework HTTP/request-body logging disabled, no query strings in any log line, and an in-memory capture sink registered in tests for the leak tests. (T1, T5)
+- [x] 6. Configure logging: JSON console output, framework HTTP/request-body logging disabled, no query strings in any log line, and an in-memory capture sink registered in tests for the leak tests. (T1, T5)
 - [ ] 7. Write `docs/threat-model.md` expanding the threat register above into STRIDE-per-component detail (trust boundaries, assets, attacker capabilities, residual risks); define the `[Trait("Threat", "T#")]` test convention it is verified against.
 
 ## Phase 2: Core Domain

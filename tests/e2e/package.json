@@ -1,0 +1,20 @@
+{
+  "name": "oneshot-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run test"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/node": "22.20.2",
+    "typescript": "7.0.2"
+  }
+}

@@ -6,11 +6,8 @@ using System.Text.Json;
 
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Time.Testing;
 
 using OneShot.Tests.Infrastructure;
 using OneShot.Web.Secrets;
@@ -19,7 +16,7 @@ using OneShot.Web.Security;
 namespace OneShot.Tests.Api;
 
 [Trait("Threat", "T10")]
-public sealed class WhoAmITests : IClassFixture<CapturingWebApplicationFactory>
+public sealed class WhoAmITests : IClassFixture<CapturingWebApplicationFactory>, IDisposable
 {
     private const string Account = "CORP\\alice";
 
@@ -28,14 +25,15 @@ public sealed class WhoAmITests : IClassFixture<CapturingWebApplicationFactory>
     private static readonly Uri Secrets = new("/api/secrets", UriKind.Relative);
 
     private readonly CapturingWebApplicationFactory _factory;
-    private readonly FakeTimeProvider _clock = new(Now);
-    private readonly WebApplicationFactory<Program> _app;
+    private readonly FakeTimeApp _app;
 
     public WhoAmITests(CapturingWebApplicationFactory factory)
     {
         _factory = factory;
-        _app = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services => services.AddSingleton<TimeProvider>(_clock)));
+        _app = factory.WithFakeTime(Now);
     }
+
+    public void Dispose() => _app.Dispose();
 
     [Fact]
     public async Task WithoutCredentials_WhoAmIChallengesWithNegotiate_AndSetsNoCookie()
@@ -78,7 +76,7 @@ public sealed class WhoAmITests : IClassFixture<CapturingWebApplicationFactory>
         using var client = Client();
         var cookie = await IdentityCookieFor(client);
 
-        var protector = _app.Services.GetRequiredService<IDataProtectionProvider>()
+        var protector = _app.Service<IDataProtectionProvider>()
             .CreateProtector("Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationMiddleware", IdentityCookie.Scheme, "v2");
         var ticket = new TicketDataFormat(protector).Unprotect(cookie);
 
@@ -115,7 +113,7 @@ public sealed class WhoAmITests : IClassFixture<CapturingWebApplicationFactory>
     {
         using var client = Client();
         var cookie = await IdentityCookieFor(client);
-        _clock.Advance(TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(1));
+        _app.Clock.Advance(TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(1));
         _factory.Logs.Clear();
 
         using var create = await client.SendAsync(WithCookie(CreateRequest(), cookie));

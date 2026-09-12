@@ -1,10 +1,6 @@
 using System.Net;
 using System.Text.Json;
 
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Time.Testing;
 
 using OneShot.Tests.Infrastructure;
 using OneShot.Web.Secrets;
@@ -12,7 +8,7 @@ using OneShot.Web.Secrets;
 namespace OneShot.Tests.Api;
 
 [Trait("Threat", "T4")]
-public sealed class PeekSecretEndpointTests : IClassFixture<CapturingWebApplicationFactory>
+public sealed class PeekSecretEndpointTests : IClassFixture<CapturingWebApplicationFactory>, IDisposable
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 12, 12, 0, 0, TimeSpan.Zero);
 
@@ -28,14 +24,15 @@ public sealed class PeekSecretEndpointTests : IClassFixture<CapturingWebApplicat
     ];
 
     private readonly CapturingWebApplicationFactory _factory;
-    private readonly FakeTimeProvider _clock = new(Now);
-    private readonly WebApplicationFactory<Program> _app;
+    private readonly FakeTimeApp _app;
 
     public PeekSecretEndpointTests(CapturingWebApplicationFactory factory)
     {
         _factory = factory;
-        _app = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services => services.AddSingleton<TimeProvider>(_clock)));
+        _app = factory.WithFakeTime(Now);
     }
+
+    public void Dispose() => _app.Dispose();
 
     [Fact]
     public async Task AvailableSecret_Is200_WithStateAndExpiry()
@@ -123,7 +120,7 @@ public sealed class PeekSecretEndpointTests : IClassFixture<CapturingWebApplicat
     {
         var id = Create(TimeSpan.FromMinutes(1));
         using var client = _app.CreateClient();
-        _clock.Advance(TimeSpan.FromMinutes(1));
+        _app.Clock.Advance(TimeSpan.FromMinutes(1));
 
         using var response = await client.GetAsync(Url(id));
         using var body = await Parse(response);
@@ -219,7 +216,7 @@ public sealed class PeekSecretEndpointTests : IClassFixture<CapturingWebApplicat
         yield return [("X-Purpose", "preview"), ("Accept", "*/*")];
     }
 
-    private ISecretStore Store => _app.Services.GetRequiredService<ISecretStore>();
+    private ISecretStore Store => _app.Service<ISecretStore>();
 
     private string Create(TimeSpan timeToLive)
     {

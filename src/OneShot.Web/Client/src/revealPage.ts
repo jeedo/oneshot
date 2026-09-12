@@ -1,12 +1,16 @@
-import { peekSecret, whoami } from './api';
-import { type RevealView, runRevealLoad } from './revealFlow';
+import { peekSecret, revealSecret, whoami } from './api';
+import { type RevealView, runReveal, runRevealLoad } from './revealFlow';
 
 const errors: Record<string, string> = {
   invalidKey: 'This link is incomplete, so the secret cannot be decrypted. Ask the sender for a new link.',
   invalidLink: 'This link is not a valid OneShot link.',
+  consumed: 'This secret has already been revealed. If that was not you, treat the secret as compromised.',
+  unknown: 'This secret does not exist, or it has expired.',
+  tampered: 'This secret was corrupted or tampered with, so it cannot be trusted. Ask the sender for a new link.',
+  revealNotAllowed: 'This reveal was blocked. Open the link directly in your browser and try again.',
   rateLimited: 'Too many attempts from this network. Wait a minute and reload.',
   insecureContext: 'This page must be opened over HTTPS to decrypt secrets.',
-  failed: 'The secret could not be checked. Reload to try again.',
+  failed: 'The secret could not be revealed. Reload to try again.',
 };
 
 const states: Record<string, string> = {
@@ -21,7 +25,10 @@ export function initRevealPage(root: Document): void {
   const identity = root.querySelector<HTMLElement>('#identity');
   const error = root.querySelector<HTMLElement>('#error');
   const reveal = root.querySelector<HTMLButtonElement>('#reveal');
-  if (!status || !expiry || !identity || !error || !reveal) {
+  const result = root.querySelector<HTMLElement>('#result');
+  const plaintext = root.querySelector<HTMLPreElement>('#plaintext');
+  const copy = root.querySelector<HTMLButtonElement>('#copy');
+  if (!status || !expiry || !identity || !error || !reveal || !result || !plaintext || !copy) {
     return;
   }
 
@@ -36,7 +43,7 @@ export function initRevealPage(root: Document): void {
     return;
   }
 
-  let revealKey: Uint8Array | null = null;
+  let revealKey: Uint8Array<ArrayBuffer> | null = null;
 
   const view: RevealView = {
     stripFragment: () => root.defaultView?.history.replaceState(null, '', root.location.pathname),
@@ -50,8 +57,8 @@ export function initRevealPage(root: Document): void {
     },
     showError,
     enableReveal: (key) => {
-      // Held only in this closure — never on the DOM, never in storage. Task 23 decrypts with it.
-      revealKey = key;
+      // Held only in this closure — never on the DOM, never in storage — and zeroed by the reveal itself.
+      revealKey = key as Uint8Array<ArrayBuffer>;
       reveal.disabled = false;
     },
     setIdentity: (user) => {
@@ -60,12 +67,41 @@ export function initRevealPage(root: Document): void {
         identity.hidden = false;
       }
     },
+    disableReveal: () => {
+      reveal.disabled = true;
+    },
+    showSecret: (text) => {
+      // textContent, never an HTML sink: revealed content is data, never markup (T7).
+      plaintext.textContent = text;
+      status.hidden = true;
+      expiry.hidden = true;
+      error.hidden = true;
+      result.hidden = false;
+      copy.focus();
+    },
   };
 
+  reveal.addEventListener('click', () => {
+    const key = revealKey;
+    revealKey = null;
+    if (!key) {
+      return;
+    }
+    void runReveal(view, { id: pathId(root), key, reveal: (id) => revealSecret(id) });
+  });
+
+  copy.addEventListener('click', () => {
+    void navigator.clipboard.writeText(plaintext.textContent ?? '');
+  });
+
   void runRevealLoad(view, {
-    id: root.location.pathname.split('/').pop() ?? '',
+    id: pathId(root),
     fragment: root.location.hash.slice(1),
     peek: (id) => peekSecret(id),
     whoami: () => whoami(),
   });
+}
+
+function pathId(root: Document): string {
+  return root.location.pathname.split('/').pop() ?? '';
 }

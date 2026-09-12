@@ -1,4 +1,4 @@
-import { encode } from './base64url';
+import { decode, encode } from './base64url';
 
 export interface CreatedSecret {
   id: string;
@@ -27,6 +27,39 @@ export interface SecretPeek {
 export type PeekSecretFn = (id: string) => Promise<SecretPeek>;
 
 export type WhoAmIFn = () => Promise<string | null>;
+
+export interface RevealedSecret {
+  ciphertext: Uint8Array<ArrayBuffer>;
+  nonce: Uint8Array<ArrayBuffer>;
+}
+
+export type RevealSecretFn = (id: string) => Promise<RevealedSecret>;
+
+// The only call that consumes a secret; the custom header is what no form or prefetch can send.
+export async function revealSecret(id: string, fetchFn: typeof fetch = fetch): Promise<RevealedSecret> {
+  const response = await fetchFn(`/api/secrets/${id}/reveal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-OneShot-Reveal': '1' },
+    body: '{}',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    referrerPolicy: 'no-referrer',
+  });
+  if (response.status !== 200) {
+    throw new ApiError(response.status, await problemCode(response));
+  }
+
+  const body = (await response.json().catch(() => ({}))) as { ciphertext?: unknown; nonce?: unknown };
+  if (typeof body.ciphertext !== 'string' || typeof body.nonce !== 'string') {
+    throw new ApiError(response.status, 'malformedPayload');
+  }
+
+  try {
+    return { ciphertext: decode(body.ciphertext), nonce: decode(body.nonce) };
+  } catch {
+    throw new ApiError(response.status, 'malformedPayload');
+  }
+}
 
 const WHOAMI_TIMEOUT_MS = 2000;
 

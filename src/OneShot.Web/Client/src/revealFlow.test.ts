@@ -18,6 +18,8 @@ function harness() {
       events.push('enable');
     },
     setIdentity: (user) => events.push(`identity:${user ?? 'anonymous'}`),
+    disableReveal: () => events.push('disable'),
+    showSecret: (plaintext) => events.push(`secret:${plaintext}`),
   };
   return { view, events, key: () => enabledKey };
 }

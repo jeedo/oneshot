@@ -10,6 +10,8 @@ touching code.
 Always read at the beginning of every session:
 - [`docs/architecture.md`](docs/architecture.md) — system design and decided trade-offs
 - [`docs/plan.md`](docs/plan.md) — threat register (T1–T15) and the phased, numbered task list
+- [`docs/threat-model.md`](docs/threat-model.md) — STRIDE per component, residual risks, the `[Trait("Threat", "T#")]`
+  convention, and the analyzer-suppression register
 - [`docs/research.md`](docs/research.md) — survey of existing one-time-secret tools this design is based on
 
 Then run `python3 scripts/check_docs.py` and surface any failures to the user before proceeding.

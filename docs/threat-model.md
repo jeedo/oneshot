@@ -114,7 +114,7 @@ Each table lists the threats that apply to the component, the register ID, and w
 | Tampering | Headers forged to bypass rate limiting | T11 | Forwarded headers honoured only from configured known proxies (20, 30) |
 | Info disclosure | Stack traces, framework versions, `Server` header, distinguishable error bodies | T13 | `AddServerHeader = false` (5); generic RFC 7807 errors, no developer exception page in any environment (24, 41) |
 | Denial of service | Body, header, and connection exhaustion | T6 | `MaxRequestBodySize` 128 KiB, header size/count caps, keep-alive and header timeouts (5) |
-| Elevation | Misconfiguration enables HTTP, dev pages, or untrusted proxies | T15 | `ValidateOnStart` fails fast outside Development (49); deployment docs (50) |
+| Elevation | Misconfiguration enables HTTP, dev pages, or untrusted proxies | T15 | `ValidateOnStart` refuses to start outside Development when no HTTPS address and no trusted proxy are configured, when `DetailedErrors` is on, when the HSTS max-age, body/header limits, capacity caps or rate limits are absent or unusable, or when forwarded headers are configured without known proxies (49); deployment docs (50) |
 
 ### C5. API endpoints (`POST /api/secrets`, `GET /api/secrets/{id}`, `POST …/reveal`)
 
@@ -186,7 +186,7 @@ Each table lists the threats that apply to the component, the register ID, and w
 | T12 | Malformed input / parser abuse | 10, 16 | 38 |
 | T13 | Information disclosure via errors/headers | 5, 24 | 41 |
 | T14 | Vulnerable or malicious dependencies | 2, 46, 47, 48, 53 | 43 |
-| T15 | Deployment misconfiguration | 49, 50 | 49 (startup validation is exercised by its own tests) |
+| T15 | Deployment misconfiguration | 49, 50 | 49 |
 
 ## Residual Risks and Accepted Trade-offs
 
@@ -240,7 +240,8 @@ exception cannot outlive its reason. Anything else uncovered fails the build.
 
 | Threat | Covered by | Why it has no test yet |
 |--------|------------|------------------------|
-| T15 | plan task 49 | T15's mitigation is fail-fast startup validation (`ValidateOnStart`), which is not built yet. The related defaults — HTTPS redirection, no developer exception page, bounded Kestrel limits, and forwarded headers ignored without configured proxies — are already tested, but under the threats they primarily serve (T7/T8, T13, T5, T11) rather than relabelled as T15. |
+
+*(none — every threat in the register has a citing test.)*
 
 ## Analyzer Suppressions
 

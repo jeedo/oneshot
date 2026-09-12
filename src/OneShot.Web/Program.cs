@@ -29,6 +29,7 @@ builder.Services.AddHostedService(provider => new ExpirySweeperService(
 builder.Services.AddSingleton<AuditLogger>();
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection("RateLimiting"));
 builder.Services.AddOneShotRateLimiting();
+builder.Services.AddStartupValidation();
 
 builder.Services.AddAuthentication(IdentityCookie.Scheme)
     .AddNegotiate()

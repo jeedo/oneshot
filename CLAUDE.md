@@ -85,6 +85,10 @@ first. Chromium is pre-installed at `PLAYWRIGHT_BROWSERS_PATH`; never run `playw
   `src/OneShot.Web/Client` before compiling, producing the git-ignored `wwwroot/js/oneshot.js`. The client has
   zero runtime dependencies (`dependencies` in `package.json` stays `{}`); devDependencies are pinned exactly and
   `package-lock.json` is committed.
+- Outside `Development` the host validates its deployment at startup and refuses to run when it is unsafe
+  (T15, plan task 49) — most often because only plain-HTTP addresses are configured with no trusted proxy. To
+  run locally in `Production`, either serve HTTPS or set `ForwardedHeaders__KnownProxies__0=127.0.0.1` to stand
+  in for TLS terminating upstream. `dotnet run` defaults to `Development`, where validation is skipped.
 - The bundle's SHA-256 is recorded in `src/OneShot.Web/Client/bundle.sha256` and feeds the layout's `integrity`
   attribute and the CSP `script-src` hash (T7). The build fails when it is stale; after any client change, review
   the bundle diff, run `dotnet msbuild src/OneShot.Web -t:UpdateClientBundleHash`, and commit the updated file.

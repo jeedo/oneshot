@@ -24,8 +24,8 @@ decryption key or the plaintext.
 **Success Criteria**:
 - The server process/store never has both the ciphertext and the decryption key at the same time; the server can
   never reconstruct the plaintext secret.
-- The encrypted secret is held only in memory (`ConcurrentDictionary`-backed store) and is never written to disk,
-  a database, or a log.
+- The encrypted secret is held only in memory (`ConcurrentDictionary`-backed store, single instance) and is never
+  written to disk, a database, or a log.
 - A secret can be successfully revealed at most once; a second retrieval attempt (concurrent or sequential)
   always fails, with no race window that allows two callers to both succeed (atomic consume).
 - A secret that is never retrieved is purged automatically once its TTL elapses.
@@ -46,7 +46,7 @@ decryption key or the plaintext.
 | Transport security | TLS 1.2+, HSTS, `Cache-Control: no-store` on all secret endpoints | Prevents downgrade, browser/proxy caching of ciphertext or the reveal page |
 | Rate limiting | ASP.NET Core built-in `Microsoft.AspNetCore.RateLimiting` | Defense in depth against brute-force enumeration of secret IDs, on top of the 128-bit ID keyspace already making that infeasible |
 | Testing | xUnit | Standard .NET test framework; unit-tests the atomic consume/TTL logic and integration-tests the API endpoints |
-| Optional scale-out store | `ISecretStore` implementation backed by Redis (persistence explicitly disabled: `save ""`, no AOF) | Documented escape hatch for multi-instance deployments; kept behind the same interface so the default single-instance deployment has no external dependency (see Open Questions) |
+| Deployment topology | Single instance | Node-local `ConcurrentDictionary` storage; deliberate simplicity trade-off, see Open Questions |
 
 ## System Components
 
@@ -143,9 +143,12 @@ history sync by default.
 
 ## Open Questions / Documented Trade-offs
 
-- **Single-instance vs. scale-out**: the default `InMemorySecretStore` is node-local, so a multi-instance
-  deployment behind a load balancer needs sticky sessions, or the Redis-backed `ISecretStore` implementation
-  (persistence explicitly disabled). This choice is deferred to the implementation plan rather than solved here.
+- **Single-instance deployment (decided)**: OneShot runs as a single ASP.NET Core instance; the
+  `InMemorySecretStore` is node-local by design, with no distributed cache or shared backing store. This is a
+  deliberate simplicity trade-off — it means the app cannot be scaled horizontally or run behind a load balancer
+  across multiple nodes without secrets becoming unreachable depending on which node handled `POST /api/secrets`
+  versus which node later receives the reveal request. If scale-out is needed later, it requires either sticky
+  sessions pinned to the creating instance, or introducing a shared `ISecretStore` backend — neither is built now.
 - **Server-side encryption alternative**: research documents a simpler alternative (Password Pusher's model,
   where the server itself encrypts a plaintext secret submitted over TLS). This architecture intentionally
   chooses the stronger zero-knowledge model instead; revisit only if client-side crypto proves to be a UX

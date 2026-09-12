@@ -1,0 +1,96 @@
+# Implementation Plan
+
+> Generated from [Architecture](architecture.md)
+> **Last Updated**: 2026-09-12
+
+Security is the primary quality attribute of this project, so the plan is organised around a **threat register**:
+every mitigation task in Phases 1–3 and every test task in Phase 4 cites the threat IDs it addresses, and a CI
+check (task 26) fails if any threat has no test. Phases follow the spec-template order; each task is meant to be
+one branch, written tests-first (red → green).
+
+## Threat Register
+
+| ID | Attack / vulnerability vector | Primary mitigation (see architecture.md) |
+|----|-------------------------------|------------------------------------------|
+| T1 | Server-side exposure of plaintext or key (zero-knowledge violation) via request bodies, logs, exceptions, crash dumps | Client-side AES-256-GCM; key only in URL fragment; audit logger structurally unable to see payloads |
+| T2 | Double-read: two recipients both succeed via a read-then-delete race | Single atomic `TryRemove`-based `TryConsume`; tombstone after consumption |
+| T3 | Secret Id enumeration / brute force | 128-bit CSPRNG Ids; per-IP rate limiting; uniform 404 responses |
+| T4 | Pre-burn by link scanners, prefetchers, or cross-site (CSRF) triggering of the reveal | Side-effect-free `GET`; reveal only via same-origin `POST` with custom header; no CORS |
+| T5 | Secret material reaching disk: logs, Data Protection key ring, container volumes, swap/crash dumps | In-memory-only store; ephemeral Data Protection; read-only container FS; buffers zeroed on consume/evict |
+| T6 | Denial of service / memory exhaustion via mass or oversized creates; sweeper starvation | Body size limit; entry and byte capacity caps; bounded sweeper; rate limiting |
+| T7 | XSS or DOM injection through revealed secret content; tampered JS bundle stealing the fragment key | Strict hash-based CSP; `textContent` rendering; SRI on the single first-party bundle |
+| T8 | Transport/browser leakage: TLS downgrade, proxy/browser caching, referrer leakage, key persisting in history | HSTS + HTTPS-only; `no-store`; `no-referrer`; fragment stripped after read |
+| T9 | Cryptographic weakness: nonce reuse, weak randomness, undetected ciphertext tampering | Fresh key + 12-byte nonce per secret from `crypto.getRandomValues`; GCM authentication; server can't decrypt |
+| T10 | Forged or spoofed audit identity; identity cookie replay; PII over-collection | Negotiate-verified identity, signed short-lived cookie; audit event limited to four fields |
+| T11 | Rate-limit bypass via forged `X-Forwarded-For` / proxy headers or IPv6 address rotation | Forwarded headers only from known proxies; IPv6 /64 partitioning |
+| T12 | Malformed input / parser abuse: base64, nonce length, TTL bounds, JSON depth, encoding tricks | Strict model validation with typed errors that never echo input |
+| T13 | Information disclosure via error pages, stack traces, server headers, differing error bodies | Generic RFC 7807 errors; `Server` header removed; uniform not-found responses |
+| T14 | Vulnerable or malicious dependencies (NuGet, npm, base image) | Zero runtime JS dependencies; vulnerability scanning and lockfiles in CI |
+| T15 | Deployment misconfiguration: HTTP enabled, dev exception page, missing limits, untrusted proxies | Fail-fast startup validation; hardened container; deployment docs |
+
+## Phase 1: Setup & Scaffolding
+
+- [ ] 1. Create the .NET 8 solution with `src/OneShot.Web` (Razor Pages + Minimal APIs) and `tests/OneShot.Tests` (xUnit); add `global.json`, `.gitignore`, `.editorconfig`, and a `Directory.Build.props` enabling nullable, `TreatWarningsAsErrors`, and `Microsoft.CodeAnalysis.NetAnalyzers` with the CA3xxx/CA5xxx security rules at `error` severity.
+- [ ] 2. Set up the TypeScript toolchain for the client crypto module (`src/OneShot.Web/Client`, esbuild to a single `wwwroot/js/oneshot.js`, zero runtime dependencies) and vitest for TS unit tests. (T14)
+- [ ] 3. Wire the bundle into the Razor layout with a build-time SHA-256 that feeds both the `integrity` attribute and the CSP `script-src` hash; fail the build if the recorded hash is stale. (T7)
+- [ ] 4. Add the security-headers middleware: HSTS (1 year, preload), HTTPS redirection, `Cache-Control: no-store` + `Pragma: no-cache` on `/`, `/s/*`, `/api/*`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, deny-all `Permissions-Policy`, and CSP `default-src 'none'; script-src 'sha256-…'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. (T7, T8)
+- [ ] 5. Harden Kestrel: `AddServerHeader = false`, TLS 1.2+ only, `MaxRequestBodySize` 128 KiB, header size/count limits, request/keep-alive timeouts, and `UseEphemeralDataProtectionProvider()` so no key ring is ever written to disk. (T5, T13)
+- [ ] 6. Configure logging: JSON console output, framework HTTP/request-body logging disabled, no query strings in any log line, and an in-memory capture sink registered in tests for the leak tests. (T1, T5)
+- [ ] 7. Write `docs/threat-model.md` expanding the threat register above into STRIDE-per-component detail (trust boundaries, assets, attacker capabilities, residual risks); define the `[Trait("Threat", "T#")]` test convention it is verified against.
+
+## Phase 2: Core Domain
+
+- [ ] 8. Define `SecretRecord` (`Id`, `Ciphertext: byte[]`, `Nonce: byte[]`, `CreatedAtUtc`, `ExpiresAtUtc`), the `ConsumedSecret` disposable wrapper that zeroes its buffers on `Dispose`, and the `ISecretStore` interface (`Create`, `Peek`, `TryConsume`) taking a `TimeProvider` so expiry is deterministic in tests. (T1)
+- [ ] 9. Implement secret Id generation: 16 bytes from `RandomNumberGenerator`, base64url-encoded to a fixed 22 characters — never `Guid.NewGuid()` or `System.Random`. (T3, T9)
+- [ ] 10. Implement `InMemorySecretStore.Create` with validation: ciphertext between 16 bytes (GCM tag) and 64 KiB, nonce exactly 12 bytes, TTL within 60 s – 7 days (default 1 h); failures return a typed `ValidationError` that never includes the submitted value. (T12)
+- [ ] 11. Implement `TryConsume` as one `ConcurrentDictionary.TryRemove` followed by insertion of a payload-free tombstone (`ConsumedAtUtc`, original `ExpiresAtUtc`), returning a `ConsumedSecret`; a second caller observes the tombstone, never the payload. (T2)
+- [ ] 12. Implement `Peek` returning only `{ State: Available | Consumed | Unknown, ExpiresAt }`; expired secrets and tombstones read as `Unknown` and are lazily evicted and zeroed. (T2, T5)
+- [ ] 13. Implement capacity limits: configurable max entries (default 10,000) and max total ciphertext bytes (default 64 MiB), accounted atomically with insert/evict; `Create` returns `CapacityExceeded` rather than storing when either cap would be crossed. (T6)
+- [ ] 14. Implement `ExpirySweeperService` (`BackgroundService`, 30 s period, `TimeProvider`-driven) that evicts and zeroes expired secrets and tombstones with a bounded per-pass scan and per-pass exception isolation so one fault never stops later sweeps. (T5, T6)
+- [ ] 15. Implement `AuditLogger.Log(AuditAction, string secretId, ClaimsPrincipal user)` emitting exactly `{ timestampUtc, action, secretId, windowsUser }` with `windowsUser = "anonymous"` unless the principal came from the identity cookie (task 19); the type has no dependency on `SecretRecord`, so it cannot log payloads. (T1, T10)
+
+## Phase 3: API / Interface
+
+- [ ] 16. `POST /api/secrets`: bind `{ ciphertext, nonce, ttlSeconds }` (base64url strings) with strict `JsonSerializerOptions` (unknown fields rejected, max depth 8, no number-as-string), map `ValidationError` to 400 and `CapacityExceeded` to 503 with `Retry-After`, return `{ id, expiresAt }`, and write the `create` audit event. (T6, T12)
+- [ ] 17. `GET /api/secrets/{id}`: constant-shape `{ state, expiresAt }`, 404 for Unknown, identical behaviour for `HEAD` and for any user agent or prefetch header — strictly no side effects. (T4)
+- [ ] 18. `POST /api/secrets/{id}/reveal`: require `Content-Type: application/json` and `X-OneShot-Reveal: 1`, reject with 403 when `Origin` is foreign or `Sec-Fetch-Site` is neither `same-origin` nor `none`, then `TryConsume` → 200 `{ ciphertext, nonce }`, 410 for a tombstone, 404 otherwise; dispose the `ConsumedSecret` after the response is written; write the `reveal` audit event; register no CORS policy anywhere. (T2, T4)
+- [ ] 19. Opportunistic Windows identity: register `Negotiate`; add `GET /api/whoami` which issues the 401 `WWW-Authenticate: Negotiate` challenge and, on success, sets a 5-minute identity cookie (Data-Protection-signed, `HttpOnly; Secure; SameSite=Strict; Path=/api`) holding only the Windows account name; create/reveal read identity from that cookie only, never challenge, and treat a missing, expired, or invalid cookie as anonymous. (T10)
+- [ ] 20. Rate limiting with `Microsoft.AspNetCore.RateLimiting`: per-client-IP policies `create` (20/min) and `read` (30/min, shared by peek and reveal), 429 with `Retry-After`; honour `X-Forwarded-For` only when `ForwardedHeadersOptions.KnownProxies`/`KnownNetworks` is configured, and partition IPv6 clients on their /64. (T3, T11)
+- [ ] 21. Create page (`/`): textarea + TTL selector, JS-only submission (no form `action`, so a non-JS submit cannot post plaintext); the TS module generates a 256-bit AES-GCM key and 12-byte nonce with `crypto.getRandomValues`, encrypts, POSTs ciphertext + nonce only, builds `https://host/s/{id}#{base64url(rawKey)}`, shows it with a copy button, then overwrites the textarea and drops the key reference. (T1, T9)
+- [ ] 22. Reveal page (`/s/{id}`) load path: parse and validate the fragment (decodes to exactly 32 bytes) before any network call — an invalid fragment shows an error and never enables Reveal; strip the fragment with `history.replaceState`; call `/api/whoami` best-effort (2 s timeout); `GET /api/secrets/{id}` and render Available / "Already revealed — if this wasn't you, treat the secret as compromised" / Unknown. (T4, T8)
+- [ ] 23. Reveal action: on click, POST reveal, `crypto.subtle.decrypt`, render plaintext via `textContent` inside a `<pre>` (never `innerHTML`) with a copy button; on GCM authentication failure show "this secret was corrupted or tampered with"; then overwrite key/plaintext references and disable the Reveal control. (T7, T9)
+- [ ] 24. Error handling: global exception handler returning RFC 7807 problem details with no stack, type, or internal message in any environment; no developer exception page; 404/410 pages that say nothing about other Ids; `/healthz` liveness returning a bare `200` with no counts or versions, excluded from audit and rate limits. (T13)
+
+## Phase 4: Testing & QA
+
+- [ ] 25. Test infrastructure: `WebApplicationFactory` fixture with `FakeTimeProvider`, the in-memory log sink, a test authentication handler that can impersonate a Negotiate-authenticated account, a capturing `HttpClient` handler for request inspection, and Playwright configured against the running app.
+- [ ] 26. Add `scripts/check_threat_coverage.py` (run in CI) that fails if any `T#` in `docs/threat-model.md` is not cited by at least one `[Trait("Threat", "T#")]` test or vitest `describe` tag.
+- [ ] 27. (T2) Concurrency: 1,000 iterations of 64 parallel `TryConsume` calls on one Id — exactly one wins, the rest observe the tombstone; stress interleavings of `Create`, sweeper passes, and consumes with no exceptions, no leaked entries, and no double-counting of capacity.
+- [ ] 28. (T2, T5) Expiry: `Peek`/`TryConsume` fail the instant `ExpiresAtUtc` passes; the sweeper removes expired secrets and tombstones, the store count returns to zero, and every removed buffer is all-zero afterwards.
+- [ ] 29. (T3) Enumeration: 10,000 random unknown Ids all return 404 with byte-identical bodies; 100,000 generated Ids are 22 chars, unique, and pass a chi-squared uniformity check; the `read` limiter returns 429 after its burst and recovers after the window.
+- [ ] 30. (T11) Rate-limit bypass: forged `X-Forwarded-For`, `Forwarded`, and `X-Real-IP` headers do not create new partitions unless sent by a configured known proxy; rotating IPv6 addresses within one /64 share a partition.
+- [ ] 31. (T4) Pre-burn: `GET`/`HEAD` on `/s/{id}` and `/api/secrets/{id}` with a corpus of scanner user agents (Outlook SafeLinks, Proofpoint, Mimecast, Slackbot, Twitterbot, curl, headless Chrome) and with `Purpose`/`Sec-Purpose: prefetch` never consume; reveal POSTs missing the custom header, using form content-type, carrying `Sec-Fetch-Site: cross-site`, or a foreign `Origin` return 403 and the secret remains Available.
+- [ ] 32. (T4) CSRF/CORS: `OPTIONS` preflight from a foreign origin returns no `Access-Control-Allow-*` headers; a simulated cross-site form submission and a `fetch` with `mode: no-cors` from another origin in Playwright cannot reach the consume path.
+- [ ] 33. (T7, T8) Headers: every response from `/`, `/s/{id}`, `/api/*`, 404 and 410 paths carries the exact CSP, HSTS, `nosniff`, `no-referrer`, `DENY`, and `no-store` values; no `Server` or `X-Powered-By`; the served bundle's SHA-256 equals both the CSP hash and the `integrity` attribute.
+- [ ] 34. (T7) XSS via secret content (Playwright): reveal `<img src=x onerror=…>`, `<svg onload=…>`, `javascript:` links, `</pre><script>…`, RTL/zero-width unicode, and a 64 KiB payload — assert no dialog, no injected nodes, literal text present, zero CSP violation reports; assert an injected inline `<script>` on a test page is blocked by the CSP.
+- [ ] 35. (T1, T5) Leak tests: create and reveal a canary secret, then assert captured logs, audit events, response headers, and error bodies contain none of the plaintext, ciphertext, nonce, or key in raw, base64, base64url, or hex form; assert the key never appears in any captured request body, path, or query; assert `Set-Cookie` is absent on all secret endpoints.
+- [ ] 36. (T1) Memory hygiene: `ConsumedSecret.Dispose` and sweeper eviction leave buffers zeroed; reflection test that `SecretRecord` exposes no `ToString`/debugger display containing `Ciphertext` or `Nonce`; architecture test that `OneShot.Web` references no `System.Security.Cryptography.Aes*` type, guarding the server's inability to decrypt. (T9)
+- [ ] 37. (T9) Client crypto (vitest): encrypt/decrypt round trip; single-bit flips anywhere in ciphertext, tag, or nonce cause `decrypt` to throw; wrong key fails; 100,000 nonces are 12 bytes and unique and keys are 32 bytes; base64url round-trips without padding; a fetch spy proves no key bytes leave the client in any request.
+- [ ] 38. (T12) Input fuzzing: FsCheck properties plus a corpus for `POST /api/secrets` — malformed or oversized base64, nonce lengths 0–64, TTL 0/negative/`int.MaxValue`/float/string, 1,000-deep JSON, duplicate keys, unknown fields, BOM, invalid UTF-8, and 10 MB bodies → 400/413, nothing stored, no exception logged.
+- [ ] 39. (T6) DoS/capacity: fill the store to the entry cap and separately to the byte cap → next create is 503 with `Retry-After` and nothing stored; consumption and sweeping free capacity; an NBomber run of 10,000 creates and 10,000 reveals keeps the working-set delta under 1.5× the byte cap and shows the sweeper still completing passes under load.
+- [ ] 40. (T10) Audit identity: with the test Negotiate handler, `/api/whoami` sets the identity cookie with `HttpOnly; Secure; SameSite=Strict` and a ≤ 5-minute expiry, and later create/reveal audit events carry the account name; without it → `"anonymous"`; a tampered, expired, or foreign-key cookie → `"anonymous"` with no error; every audit event has exactly the four documented fields.
+- [ ] 41. (T13) Information disclosure: an exception thrown inside a handler yields a generic problem-details body with no stack, type, or message; `/api/secrets/{unknown}`, `/api/secrets/{malformed}`, and `/nonexistent` differ only as documented; responses expose no framework version.
+- [ ] 42. (T8) Fragment and transport (Playwright): after the reveal page loads, `location.hash` is empty and the history entry lacks the key; a plain-HTTP request is redirected before any API call; no request from the page carries a `Referer` beyond the origin.
+- [ ] 43. (T14) Supply chain: `dotnet list package --vulnerable --include-transitive` and `npm audit --audit-level=high` are clean; `package.json` has an empty `dependencies` map; `packages.lock.json` and `package-lock.json` are committed and enforced with locked restores.
+- [ ] 44. End-to-end (Playwright): create → copy link → open in a fresh browser context → whoami → Reveal → plaintext shown; reopen → "already revealed"; open after expiry → Unknown; open with a truncated fragment → error with the secret still Available; keyboard-only operation and accessible labels on both pages.
+
+## Phase 5: CI/CD & Deployment
+
+- [ ] 45. GitHub Actions CI (`.github/workflows/ci.yml`): locked restore, build with analyzers as errors, `dotnet format --verify-no-changes`, unit + integration tests with a ≥ 90 % line-coverage gate on the domain and endpoint code, vitest, Playwright E2E, `check_docs.py`, and `check_threat_coverage.py`.
+- [ ] 46. Security CI jobs: CodeQL (C# and JavaScript), `dotnet list package --vulnerable`, `npm audit`, gitleaks secret scanning, and an OWASP ZAP baseline scan against the started app failing on Medium or higher with a reviewed `zap-rules.tsv` allowlist. (T14)
+- [ ] 47. Dockerfile: multi-stage build onto `mcr.microsoft.com/dotnet/aspnet:8.0-jammy-chiseled` (non-root, no shell), read-only root filesystem, no volumes, `HEALTHCHECK` on `/healthz`; Trivy image scan and a syft SBOM in CI. (T5, T14)
+- [ ] 48. Startup configuration validation (`ValidateOnStart`): fail fast outside Development if HTTPS/HSTS is off, request/body/capacity limits are unset, forwarded headers are enabled without known proxies, or the developer exception page would be active. (T15)
+- [ ] 49. `docs/deployment.md`: Linux/container deployment and Windows deployment (IIS with Windows Authentication and Anonymous both enabled, or Kestrel `Negotiate` on a domain-joined host with SPN notes), TLS certificate handling, memory limits, and the standing rule that no persistence layer may ever be attached to the secret store. (T5, T15)
+- [ ] 50. `docs/runbook.md`: restart semantics (all in-flight secrets are lost by design — announce maintenance windows), audit-log retention and PII handling for Windows account names, and incident steps for a suspected compromise (rotate TLS, review audit events, redeploy from a clean image). (T10)
+- [ ] 51. Pre-release security review: walk OWASP ASVS 4.0 Level 2 and the threat register against the implementation, run the full security CI suite on the release commit, and record findings and sign-off in `docs/security-review.md`.
+- [ ] 52. Release workflow: tag → CI → build, scan, and cosign-sign the image → publish with the SBOM attached; enable `main` branch protection requiring every CI and security job. (T14)

@@ -42,8 +42,8 @@ decryption key or the plaintext.
 
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
-| Backend runtime | ASP.NET Core 8, Minimal APIs | Modern, first-class .NET web framework; Minimal APIs keep the small surface area (3 endpoints) simple with no MVC ceremony |
-| Secret storage | In-process `ConcurrentDictionary<Guid, SecretRecord>` behind an `ISecretStore` abstraction | Satisfies "never to disk" by construction; `TryRemove` gives the atomic get-and-delete needed for one-time consumption (see research §4) |
+| Backend runtime | ASP.NET Core 8, Minimal APIs | Modern, first-class .NET web framework; Minimal APIs keep the small surface area (4 endpoints) simple with no MVC ceremony |
+| Secret storage | In-process `ConcurrentDictionary<string, SecretRecord>` behind an `ISecretStore` abstraction | Satisfies "never to disk" by construction; `TryRemove` gives the atomic get-and-delete needed for one-time consumption (see research §4) |
 | Background expiry | `IHostedService` timer sweep | Purges expired, unread ciphertext from memory even if the recipient never opens the link |
 | Client-side cryptography | Web Crypto API (`SubtleCrypto`), AES-256-GCM, vanilla TypeScript | Runs in the sharer's and recipient's browsers so the server never sees plaintext or the key (zero-knowledge design, research §1) |
 | Frontend | Razor Pages + a small TypeScript module (no SPA framework) | Only two real pages (create secret, reveal secret) — a full SPA framework is unjustified complexity |
@@ -101,14 +101,15 @@ Sharer's browser                 OneShot API (ASP.NET Core)                Recip
                                                                                  discard K
 ```
 
-- **Web/API host (ASP.NET Core)**: hosts the two Razor pages (create, reveal) and the three API endpoints below.
+- **Web/API host (ASP.NET Core)**: hosts the two Razor pages (create, reveal) and the four API endpoints below.
   Applies `Cache-Control: no-store`, HSTS, and a strict CSP (script-src limited to the app's own hashed/SRI'd
   bundle) to reduce the XSS blast radius around the fragment key.
 - **`ISecretStore` abstraction** with a default **`InMemorySecretStore`**: wraps a
-  `ConcurrentDictionary<Guid, SecretRecord>`. Exposes `Create(ciphertext, nonce, ttl) -> Guid`,
-  `Peek(Guid) -> SecretMetadata?` (existence/expiry check only, no consumption — used for the confirmation page),
-  and `TryConsume(Guid) -> SecretRecord?` (atomic remove-and-return; the *only* way ciphertext ever leaves the
-  store, and it can only succeed once per Id).
+  `ConcurrentDictionary<string, SecretRecord>` with entry and byte capacity caps. Exposes
+  `Create(ciphertext, nonce, ttl) -> Id`, `Peek(Id) -> { State, ExpiresAt }` (existence/expiry check only, no
+  consumption — used for the confirmation page), and `TryConsume(Id) -> ConsumedSecret?` (atomic
+  remove-and-return that leaves a tombstone; the *only* way ciphertext ever leaves the store, it can only succeed
+  once per Id, and the returned buffers are zeroed on dispose).
 - **`ExpirySweeperService`** (`IHostedService`): runs on a timer (e.g. every 30s), scans the store, and evicts any
   record past `ExpiresAtUtc` that was never consumed, so unread secrets don't linger in memory indefinitely.
 - **Client crypto module** (TypeScript, loaded on both the create and reveal pages): on create, generates a
@@ -119,11 +120,14 @@ Sharer's browser                 OneShot API (ASP.NET Core)                Recip
 - **Rate-limiting middleware**: per-IP fixed-window limiter on `POST /api/secrets/{id}/reveal` and
   `GET /api/secrets/{id}`, to blunt automated enumeration attempts even though a 128-bit random Id is already
   computationally infeasible to guess.
-- **Optional Windows Authentication + audit logger**: the app registers the `Negotiate` authentication scheme
-  but applies no `[Authorize]` requirement to the create/reveal endpoints, so Integrated Windows Authentication
-  is attempted opportunistically — a domain-joined client on a network that negotiates it will present a Windows
-  identity via `HttpContext.User`; anyone else proceeds unauthenticated. On `POST /api/secrets` and
-  `POST /api/secrets/{id}/reveal`, an `AuditLogger` writes one structured log entry per action:
+- **Optional Windows Authentication + audit logger**: browsers only send Integrated Windows Authentication
+  credentials in response to a `401 Negotiate` challenge, so the app never challenges on the create/reveal
+  endpoints (that would block non-domain recipients). Instead the pages call a dedicated `GET /api/whoami`
+  best-effort: a domain-joined client on an intranet-zone site answers the challenge silently and receives a
+  short-lived, Data-Protection-signed identity cookie carrying only the Windows account name; anyone else gets a
+  `401` that the page ignores and proceeds as anonymous. The create/reveal endpoints read identity from that
+  cookie only. On `POST /api/secrets` and `POST /api/secrets/{id}/reveal`, an `AuditLogger` writes one
+  structured log entry per action:
   `{ timestampUtc, action ("create"|"reveal"), secretId, windowsUser ?? "anonymous" }`. It never has access to,
   and therefore can never log, the ciphertext, nonce, or decryption key — the zero-knowledge guarantee holds
   regardless of who is identified as having created or revealed a given secret Id.
@@ -134,12 +138,16 @@ Sharer's browser                 OneShot API (ASP.NET Core)                Recip
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `Id` | `Guid` | Cryptographically random (128-bit); the only thing the server needs to look up a secret |
-| `CiphertextBase64` | `string` | AES-256-GCM ciphertext (includes the auth tag); server can never decrypt this — it never has the key |
-| `NonceBase64` | `string` | 96-bit GCM nonce used for this ciphertext |
+| `Id` | `string` | 128 bits from `RandomNumberGenerator`, base64url-encoded (22 chars); the only thing the server needs to look up a secret |
+| `Ciphertext` | `byte[]` | AES-256-GCM ciphertext including the auth tag (16 B – 64 KiB); server can never decrypt this — it never has the key. Zeroed on consume/evict |
+| `Nonce` | `byte[]` | 96-bit GCM nonce used for this ciphertext; zeroed on consume/evict |
 | `CreatedAtUtc` | `DateTimeOffset` | For diagnostics/TTL bookkeeping only |
 | `ExpiresAtUtc` | `DateTimeOffset` | Hard TTL backstop, independent of whether the secret is ever read |
-| `Consumed` | `bool` | Set atomically by `TryConsume`; a consumed or expired record is unreachable/removed |
+
+After `TryConsume`, the record is replaced by a payload-free **tombstone** (`Id`, `ConsumedAtUtc`, original
+`ExpiresAtUtc`) so that a later visitor is told the secret was already revealed — tamper evidence for the
+intended recipient — until the tombstone itself expires. The store also enforces capacity caps (max entries and
+max total ciphertext bytes) so mass creation cannot exhaust memory.
 
 The decryption key is **not a field on this model** — it never exists server-side in any form.
 
@@ -149,7 +157,8 @@ The decryption key is **not a field on this model** — it never exists server-s
 |---|---|---|
 | `POST /api/secrets` | Sharer submits `{ ciphertext, nonce, ttlSeconds }` (already encrypted client-side); returns `{ id, expiresAt }` | Creates the record |
 | `GET /api/secrets/{id}` | Recipient's page checks whether the secret is still available before showing the "Reveal" button; returns `{ exists, expiresAt }` or `404` | **None** — read-only, safe for link scanners/prefetchers to hit without consuming the secret |
-| `POST /api/secrets/{id}/reveal` | Recipient explicitly clicks "Reveal"; returns `{ ciphertext, nonce }` or `410 Gone` if already consumed/expired | **Atomically consumes and deletes** the record — this is the only path that ever returns ciphertext |
+| `POST /api/secrets/{id}/reveal` | Recipient explicitly clicks "Reveal"; requires `Content-Type: application/json`, an `X-OneShot-Reveal` header, and a same-origin `Origin`/`Sec-Fetch-Site`, so no form post, prefetch, or cross-site request can trigger it; returns `{ ciphertext, nonce }`, `410 Gone` for a tombstone (already revealed), or `404` | **Atomically consumes** the record and leaves a tombstone — this is the only path that ever returns ciphertext |
+| `GET /api/whoami` | Best-effort Windows identity: issues the `Negotiate` challenge; on success sets a 5-minute signed identity cookie (`HttpOnly; Secure; SameSite=Strict`) holding only the account name; a `401` is simply treated by the page as "anonymous" | Sets the identity cookie — the only endpoint that ever challenges |
 
 Share link shape: `https://<host>/s/{id}#{base64url(key)}`. The fragment (`#...`) is never sent in the HTTP
 request to any server per the URL spec, which is what keeps the key out of server logs, proxy logs, and browser

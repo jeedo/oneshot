@@ -33,6 +33,10 @@ decryption key or the plaintext.
   does (two-step reveal, see System Components).
 - All secret transport happens over TLS; no secret material appears in a URL query string, referrer, or server
   log.
+- When a request carries an authenticated Windows identity (Integrated Windows Authentication), that identity is
+  captured in the audit log for accountability. Windows Authentication is never required to create or reveal a
+  secret — capture is best-effort so the link-sharing model keeps working for recipients who aren't domain-joined
+  or aren't on a network that negotiates it.
 
 ## Tech Stack
 
@@ -47,6 +51,8 @@ decryption key or the plaintext.
 | Rate limiting | ASP.NET Core built-in `Microsoft.AspNetCore.RateLimiting` | Defense in depth against brute-force enumeration of secret IDs, on top of the 128-bit ID keyspace already making that infeasible |
 | Testing | xUnit | Standard .NET test framework; unit-tests the atomic consume/TTL logic and integration-tests the API endpoints |
 | Deployment topology | Single instance | Node-local `ConcurrentDictionary` storage; deliberate simplicity trade-off, see Open Questions |
+| Optional authentication | `Microsoft.AspNetCore.Authentication.Negotiate` (Integrated Windows Authentication) | Best-effort capture of the caller's Windows identity for audit logging on networks/clients that support it; never required — anonymous requests still work |
+| Audit logging | Standard ASP.NET Core structured logging (`ILogger`) | Records who created/revealed a secret (identity metadata only) for accountability, without ever touching the secret content itself |
 
 ## System Components
 
@@ -113,6 +119,14 @@ Sharer's browser                 OneShot API (ASP.NET Core)                Recip
 - **Rate-limiting middleware**: per-IP fixed-window limiter on `POST /api/secrets/{id}/reveal` and
   `GET /api/secrets/{id}`, to blunt automated enumeration attempts even though a 128-bit random Id is already
   computationally infeasible to guess.
+- **Optional Windows Authentication + audit logger**: the app registers the `Negotiate` authentication scheme
+  but applies no `[Authorize]` requirement to the create/reveal endpoints, so Integrated Windows Authentication
+  is attempted opportunistically — a domain-joined client on a network that negotiates it will present a Windows
+  identity via `HttpContext.User`; anyone else proceeds unauthenticated. On `POST /api/secrets` and
+  `POST /api/secrets/{id}/reveal`, an `AuditLogger` writes one structured log entry per action:
+  `{ timestampUtc, action ("create"|"reveal"), secretId, windowsUser ?? "anonymous" }`. It never has access to,
+  and therefore can never log, the ciphertext, nonce, or decryption key — the zero-knowledge guarantee holds
+  regardless of who is identified as having created or revealed a given secret Id.
 
 ## Data Model / API
 
@@ -149,10 +163,11 @@ history sync by default.
   across multiple nodes without secrets becoming unreachable depending on which node handled `POST /api/secrets`
   versus which node later receives the reveal request. If scale-out is needed later, it requires either sticky
   sessions pinned to the creating instance, or introducing a shared `ISecretStore` backend — neither is built now.
-- **Server-side encryption alternative**: research documents a simpler alternative (Password Pusher's model,
-  where the server itself encrypts a plaintext secret submitted over TLS). This architecture intentionally
-  chooses the stronger zero-knowledge model instead; revisit only if client-side crypto proves to be a UX
-  blocker.
+- **Client-side vs. server-side encryption (decided)**: research documents a simpler alternative (Password
+  Pusher's model, where the server itself encrypts a plaintext secret submitted over TLS). Client-side
+  (zero-knowledge) encryption is chosen instead, as an added layer of security: even a compromised or malicious
+  server process can never see the plaintext or reconstruct it, because it never receives the decryption key or
+  unencrypted secret at any point — not even transiently in the request body.
 
 ## Research & References
 

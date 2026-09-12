@@ -54,6 +54,14 @@ internal enum ValidationFailure
 
 internal sealed record ValidationError(ValidationFailure Failure) : CreateResult;
 
+internal enum CapacityLimit
+{
+    Entries,
+    Bytes,
+}
+
+internal sealed record CapacityExceeded(CapacityLimit Limit) : CreateResult;
+
 internal interface ISecretStore
 {
     CreateResult Create(byte[] ciphertext, byte[] nonce, TimeSpan timeToLive);

@@ -56,6 +56,7 @@ dotnet build OneShot.sln                             # warnings are errors; secu
 dotnet test OneShot.sln                              # xUnit unit + integration tests
 dotnet format OneShot.sln --verify-no-changes        # LF endings, using-directive groups, style rules
 python3 scripts/check_docs.py                        # docs structure and task numbering
+python3 scripts/check_threat_coverage.py             # every threat in the model has a citing test
 npm --prefix src/OneShot.Web/Client run check        # tsc --noEmit, vitest, esbuild bundle
 ```
 
@@ -122,3 +123,6 @@ Run from the project root:
 | `renumber_tasks.py` | `python3 scripts/renumber_tasks.py` | Restore sequential numbering after adding/removing tasks |
 | `complete_task.py` | `python3 scripts/complete_task.py <N>` | Mark task N as complete |
 | `get_phase_tasks.py` | `python3 scripts/get_phase_tasks.py <phase>` | List tasks for a phase (by name or number) |
+| `check_threat_coverage.py` | `python3 scripts/check_threat_coverage.py` | Fail if a threat in `threat-model.md` has no `[Trait("Threat", "T#")]` or `describe('[T#] …')` test |
+
+The scripts' own tests run with `python3 -m unittest discover -s scripts -p 'test_*.py'`.

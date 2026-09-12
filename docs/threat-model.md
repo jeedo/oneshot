@@ -232,6 +232,16 @@ Rules:
 - Non-security tests (toolchain, smoke) carry no trait.
 - A mitigation with no test is a gap; the coverage check makes it a build failure.
 
+### Coverage Exceptions
+
+A threat may sit here only while its mitigation does not yet exist, and only with the task that will cover it
+named. `scripts/check_threat_coverage.py` tolerates these rows and **fails once the threat gains a test**, so an
+exception cannot outlive its reason. Anything else uncovered fails the build.
+
+| Threat | Covered by | Why it has no test yet |
+|--------|------------|------------------------|
+| T15 | plan task 49 | T15's mitigation is fail-fast startup validation (`ValidateOnStart`), which is not built yet. The related defaults — HTTPS redirection, no developer exception page, bounded Kestrel limits, and forwarded headers ignored without configured proxies — are already tested, but under the threats they primarily serve (T7/T8, T13, T5, T11) rather than relabelled as T15. |
+
 ## Analyzer Suppressions
 
 Security-category analyzer rules (CA2100, CA3xxx, CA5xxx) are build errors. Each suppression must be justified in

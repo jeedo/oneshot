@@ -20,6 +20,35 @@ internal static class ApiProblems
         return Problem(StatusCodes.Status503ServiceUnavailable, "The service cannot accept new secrets right now.", code);
     }
 
+    public static async Task WriteNotFoundAsync(HttpContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var problem = new Microsoft.AspNetCore.Mvc.ProblemDetails
+        {
+            Type = "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+            Status = StatusCodes.Status404NotFound,
+            Title = "There is no such resource.",
+            Extensions = { ["code"] = "notFound" },
+        };
+        await context.Response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json", cancellationToken);
+    }
+
+    public static async Task WriteServerErrorAsync(HttpContext context, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        var problem = new Microsoft.AspNetCore.Mvc.ProblemDetails
+        {
+            Type = "https://tools.ietf.org/html/rfc9110#section-15.6.1",
+            Status = StatusCodes.Status500InternalServerError,
+            Title = "The request could not be completed.",
+            Extensions = { ["code"] = "internalError" },
+        };
+        await context.Response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json", cancellationToken);
+    }
+
     public static async ValueTask WriteTooManyRequestsAsync(HttpContext context, TimeSpan? retryAfter, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);

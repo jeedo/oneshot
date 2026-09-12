@@ -16,21 +16,28 @@ internal static class SecurityHeaders
     {
         return app.Use((context, next) =>
         {
-            var headers = context.Response.Headers;
-            headers.ContentSecurityPolicy = ContentSecurityPolicy;
-            headers.XContentTypeOptions = "nosniff";
-            headers.XFrameOptions = "DENY";
-            headers["Referrer-Policy"] = "no-referrer";
-            headers["Permissions-Policy"] = PermissionsPolicy;
-
-            if (IsSecretPath(context.Request.Path))
-            {
-                headers.CacheControl = "no-store";
-                headers.Pragma = "no-cache";
-            }
-
+            Apply(context);
             return next(context);
         });
+    }
+
+    // Also called from the exception handler, which clears the response and would otherwise drop these.
+    public static void Apply(HttpContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var headers = context.Response.Headers;
+        headers.ContentSecurityPolicy = ContentSecurityPolicy;
+        headers.XContentTypeOptions = "nosniff";
+        headers.XFrameOptions = "DENY";
+        headers["Referrer-Policy"] = "no-referrer";
+        headers["Permissions-Policy"] = PermissionsPolicy;
+
+        if (IsSecretPath(context.Request.Path))
+        {
+            headers.CacheControl = "no-store";
+            headers.Pragma = "no-cache";
+        }
     }
 
     private static bool IsSecretPath(PathString path)

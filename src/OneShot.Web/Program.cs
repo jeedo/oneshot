@@ -52,15 +52,18 @@ if (ForwardedHeadersSetup.Build(builder.Configuration) is { } forwardedHeaders)
     app.UseForwardedHeaders(forwardedHeaders);
 }
 
+app.UseOneShotErrorHandling();
 app.UseHsts();
 app.UseHttpsRedirection();
 app.UseSecurityHeaders();
+app.UseUniformNotFound();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseRateLimiter();
 app.MapSecretsApi();
 app.MapWhoAmI();
 app.MapRazorPages();
+app.MapOperationalEndpoints();
 
 app.Run();
 

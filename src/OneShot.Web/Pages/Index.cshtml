@@ -1,3 +1,30 @@
 @page
 <h1>OneShot</h1>
-<p>Share a secret that can be read exactly once.</p>
+<p>Share a secret that can be read exactly once. It is encrypted in your browser before it leaves this page.</p>
+<section data-page="create">
+    <p>
+        <label for="secret">Secret</label><br />
+        <textarea id="secret" rows="6" cols="60" autocomplete="off" spellcheck="false" autocapitalize="off"></textarea>
+    </p>
+    <p>
+        <label for="ttl">Expires after</label>
+        <select id="ttl">
+            <option value="300">5 minutes</option>
+            <option value="900">15 minutes</option>
+            <option value="3600" selected>1 hour</option>
+            <option value="14400">4 hours</option>
+            <option value="86400">1 day</option>
+            <option value="604800">7 days</option>
+        </select>
+        <button type="button" id="create">Create link</button>
+    </p>
+    <p id="error" role="alert" hidden></p>
+    <div id="result" hidden>
+        <p>
+            <label for="link">Share link</label><br />
+            <input id="link" type="text" readonly size="80" autocomplete="off" />
+            <button type="button" id="copy">Copy</button>
+        </p>
+        <p>The link works exactly once. If the recipient reports it was already opened, treat the secret as compromised.</p>
+    </div>
+</section>

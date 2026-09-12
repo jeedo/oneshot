@@ -6,14 +6,26 @@ internal sealed class InMemorySecretStore : ISecretStore
 {
     private readonly ConcurrentDictionary<string, ISecretEntry> _entries = new(StringComparer.Ordinal);
     private readonly TimeProvider _clock;
+    private readonly int _maxEntries;
+    private readonly long _maxCiphertextBytes;
+    private int _entryCount;
+    private long _ciphertextBytes;
 
-    public InMemorySecretStore(TimeProvider clock)
+    public InMemorySecretStore(TimeProvider clock, SecretStoreOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
+        options ??= new SecretStoreOptions();
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.MaxEntries);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.MaxTotalCiphertextBytes);
+
         _clock = clock;
+        _maxEntries = options.MaxEntries;
+        _maxCiphertextBytes = options.MaxTotalCiphertextBytes;
     }
 
     public int Count => _entries.Count;
+
+    public long CiphertextBytes => Interlocked.Read(ref _ciphertextBytes);
 
     // The store takes ownership of both buffers so it can zero them on consume or evict.
     public CreateResult Create(byte[] ciphertext, byte[] nonce, TimeSpan timeToLive)
@@ -24,6 +36,11 @@ internal sealed class InMemorySecretStore : ISecretStore
         if (Validate(ciphertext, nonce, timeToLive) is { } failure)
         {
             return new ValidationError(failure);
+        }
+
+        if (Reserve(ciphertext.Length) is { } limit)
+        {
+            return new CapacityExceeded(limit);
         }
 
         var now = _clock.GetUtcNow();
@@ -86,15 +103,43 @@ internal sealed class InMemorySecretStore : ISecretStore
             var tombstone = new Tombstone(id, now, record.ExpiresAtUtc);
             if (_entries.TryUpdate(id, tombstone, record))
             {
+                Interlocked.Add(ref _ciphertextBytes, -record.Ciphertext.Length);
                 return ConsumeResult.Consumed(new ConsumedSecret(record.Ciphertext, record.Nonce));
             }
         }
     }
 
+    // Capacity is reserved before insertion and released on rejection, consume, or evict, so concurrent
+    // creates can never overshoot either cap.
+    private CapacityLimit? Reserve(int ciphertextLength)
+    {
+        if (Interlocked.Increment(ref _entryCount) > _maxEntries)
+        {
+            Interlocked.Decrement(ref _entryCount);
+            return CapacityLimit.Entries;
+        }
+
+        if (Interlocked.Add(ref _ciphertextBytes, ciphertextLength) > _maxCiphertextBytes)
+        {
+            Interlocked.Add(ref _ciphertextBytes, -ciphertextLength);
+            Interlocked.Decrement(ref _entryCount);
+            return CapacityLimit.Bytes;
+        }
+
+        return null;
+    }
+
     private void Evict(ISecretEntry entry)
     {
-        if (_entries.TryRemove(new KeyValuePair<string, ISecretEntry>(entry.Id, entry)) && entry is SecretRecord record)
+        if (!_entries.TryRemove(new KeyValuePair<string, ISecretEntry>(entry.Id, entry)))
         {
+            return;
+        }
+
+        Interlocked.Decrement(ref _entryCount);
+        if (entry is SecretRecord record)
+        {
+            Interlocked.Add(ref _ciphertextBytes, -record.Ciphertext.Length);
             record.Zero();
         }
     }

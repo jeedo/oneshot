@@ -1,8 +1,13 @@
+using Microsoft.AspNetCore.DataProtection;
+
 using OneShot.Web.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.ConfigureKestrel(KestrelHardening.Apply);
+
 builder.Services.AddRazorPages();
+builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
 builder.Services.AddHsts(options =>
 {
     options.MaxAge = TimeSpan.FromDays(365);

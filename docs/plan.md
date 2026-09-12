@@ -31,7 +31,7 @@ one branch, written tests-first (red → green).
 ## Phase 1: Setup & Scaffolding
 
 - [x] 1. Create the .NET 10 solution with `src/OneShot.Web` (Razor Pages + Minimal APIs) and `tests/OneShot.Tests` (xUnit); add `global.json`, `.gitignore`, `.editorconfig`, and a `Directory.Build.props` enabling nullable, `TreatWarningsAsErrors`, and `Microsoft.CodeAnalysis.NetAnalyzers` with the CA3xxx/CA5xxx security rules at `error` severity.
-- [ ] 2. Set up the TypeScript toolchain for the client crypto module (`src/OneShot.Web/Client`, esbuild to a single `wwwroot/js/oneshot.js`, zero runtime dependencies) and vitest for TS unit tests. (T14)
+- [x] 2. Set up the TypeScript toolchain for the client crypto module (`src/OneShot.Web/Client`, esbuild to a single `wwwroot/js/oneshot.js`, zero runtime dependencies) and vitest for TS unit tests. (T14)
 - [ ] 3. Wire the bundle into the Razor layout with a build-time SHA-256 that feeds both the `integrity` attribute and the CSP `script-src` hash; fail the build if the recorded hash is stale. (T7)
 - [ ] 4. Add the security-headers middleware: HSTS (1 year, preload), HTTPS redirection, `Cache-Control: no-store` + `Pragma: no-cache` on `/`, `/s/*`, `/api/*`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, deny-all `Permissions-Policy`, and CSP `default-src 'none'; script-src 'sha256-…'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. (T7, T8)
 - [ ] 5. Harden Kestrel: `AddServerHeader = false`, TLS 1.2+ only, `MaxRequestBodySize` 128 KiB, header size/count limits, request/keep-alive timeouts, and `UseEphemeralDataProtectionProvider()` so no key ring is ever written to disk. (T5, T13)

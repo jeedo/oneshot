@@ -54,9 +54,10 @@ dotnet build OneShot.sln                             # warnings are errors; secu
 dotnet test OneShot.sln                              # xUnit unit + integration tests
 dotnet format OneShot.sln --verify-no-changes        # LF endings, using-directive groups, style rules
 python3 scripts/check_docs.py                        # docs structure and task numbering
+npm --prefix src/OneShot.Web/Client run check        # tsc --noEmit, vitest, esbuild bundle
 ```
 
-Fix all errors before proceeding. Client-side (TypeScript) checks are added by plan task 2.
+Fix all errors before proceeding.
 
 ---
 
@@ -66,7 +67,10 @@ Fix all errors before proceeding. Client-side (TypeScript) checks are added by p
 - In Claude Code on the web the egress proxy blocks `builds.dotnet.microsoft.com`, so the dotnet-install script
   fails. Install from the Ubuntu archive instead: `apt-get update && apt-get install -y dotnet-sdk-10.0`.
   NuGet (`api.nuget.org`) is reachable.
-- Node.js is required for the client crypto module from plan task 2 onward.
+- Node.js 22.12+ is required: `dotnet build` runs `npm ci --ignore-scripts` and the esbuild bundle for
+  `src/OneShot.Web/Client` before compiling, producing the git-ignored `wwwroot/js/oneshot.js`. The client has
+  zero runtime dependencies (`dependencies` in `package.json` stays `{}`); devDependencies are pinned exactly and
+  `package-lock.json` is committed.
 
 ---
 

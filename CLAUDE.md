@@ -56,6 +56,7 @@ dotnet build OneShot.sln                             # warnings are errors; secu
 dotnet test OneShot.sln                              # xUnit unit + integration tests
 dotnet format OneShot.sln --verify-no-changes        # LF endings, using-directive groups, style rules
 python3 scripts/check_docs.py                        # docs structure and task numbering
+python3 scripts/check_threat_coverage.py             # every threat in the model has a citing test
 npm --prefix src/OneShot.Web/Client run check        # tsc --noEmit, vitest, esbuild bundle
 ```
 
@@ -84,6 +85,10 @@ first. Chromium is pre-installed at `PLAYWRIGHT_BROWSERS_PATH`; never run `playw
   `src/OneShot.Web/Client` before compiling, producing the git-ignored `wwwroot/js/oneshot.js`. The client has
   zero runtime dependencies (`dependencies` in `package.json` stays `{}`); devDependencies are pinned exactly and
   `package-lock.json` is committed.
+- Outside `Development` the host validates its deployment at startup and refuses to run when it is unsafe
+  (T15, plan task 49) — most often because only plain-HTTP addresses are configured with no trusted proxy. To
+  run locally in `Production`, either serve HTTPS or set `ForwardedHeaders__KnownProxies__0=127.0.0.1` to stand
+  in for TLS terminating upstream. `dotnet run` defaults to `Development`, where validation is skipped.
 - The bundle's SHA-256 is recorded in `src/OneShot.Web/Client/bundle.sha256` and feeds the layout's `integrity`
   attribute and the CSP `script-src` hash (T7). The build fails when it is stale; after any client change, review
   the bundle diff, run `dotnet msbuild src/OneShot.Web -t:UpdateClientBundleHash`, and commit the updated file.
@@ -122,3 +127,6 @@ Run from the project root:
 | `renumber_tasks.py` | `python3 scripts/renumber_tasks.py` | Restore sequential numbering after adding/removing tasks |
 | `complete_task.py` | `python3 scripts/complete_task.py <N>` | Mark task N as complete |
 | `get_phase_tasks.py` | `python3 scripts/get_phase_tasks.py <phase>` | List tasks for a phase (by name or number) |
+| `check_threat_coverage.py` | `python3 scripts/check_threat_coverage.py` | Fail if a threat in `threat-model.md` has no `[Trait("Threat", "T#")]` or `describe('[T#] …')` test |
+
+The scripts' own tests run with `python3 -m unittest discover -s scripts -p 'test_*.py'`.

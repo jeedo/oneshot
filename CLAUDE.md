@@ -71,6 +71,9 @@ Fix all errors before proceeding.
   `src/OneShot.Web/Client` before compiling, producing the git-ignored `wwwroot/js/oneshot.js`. The client has
   zero runtime dependencies (`dependencies` in `package.json` stays `{}`); devDependencies are pinned exactly and
   `package-lock.json` is committed.
+- The bundle's SHA-256 is recorded in `src/OneShot.Web/Client/bundle.sha256` and feeds the layout's `integrity`
+  attribute and the CSP `script-src` hash (T7). The build fails when it is stale; after any client change, review
+  the bundle diff, run `dotnet msbuild src/OneShot.Web -t:UpdateClientBundleHash`, and commit the updated file.
 
 ---
 

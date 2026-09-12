@@ -27,6 +27,8 @@ builder.Services.AddHostedService(provider => new ExpirySweeperService(
     provider.GetRequiredService<IOptions<SweeperOptions>>().Value,
     provider.GetRequiredService<ILogger<ExpirySweeperService>>()));
 builder.Services.AddSingleton<AuditLogger>();
+builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection("RateLimiting"));
+builder.Services.AddOneShotRateLimiting();
 
 builder.Services.AddAuthentication(IdentityCookie.Scheme)
     .AddNegotiate()
@@ -45,11 +47,17 @@ builder.Services.AddHsts(options =>
 
 var app = builder.Build();
 
+if (ForwardedHeadersSetup.Build(builder.Configuration) is { } forwardedHeaders)
+{
+    app.UseForwardedHeaders(forwardedHeaders);
+}
+
 app.UseHsts();
 app.UseHttpsRedirection();
 app.UseSecurityHeaders();
 app.UseStaticFiles();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.MapSecretsApi();
 app.MapWhoAmI();
 app.MapRazorPages();

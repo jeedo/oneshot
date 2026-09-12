@@ -5,6 +5,7 @@
     <UserSecretsId>oneshot-web</UserSecretsId>
     <ClientRoot>Client/</ClientRoot>
     <ClientBundle>wwwroot/js/oneshot.js</ClientBundle>
+    <ClientBundleHashFile>$(ClientRoot)bundle.sha256</ClientBundleHashFile>
     <DefaultItemExcludes>$(DefaultItemExcludes);$(ClientRoot)node_modules/**</DefaultItemExcludes>
   </PropertyGroup>
 
@@ -15,6 +16,8 @@
   <ItemGroup>
     <ClientSource Include="$(ClientRoot)src/**/*.ts" Exclude="$(ClientRoot)src/**/*.test.ts" />
     <ClientSource Include="$(ClientRoot)package.json;$(ClientRoot)package-lock.json;$(ClientRoot)tsconfig.json" />
+    <None Remove="$(ClientBundleHashFile)" />
+    <EmbeddedResource Include="$(ClientBundleHashFile)" LogicalName="OneShot.Web.bundle.sha256" />
   </ItemGroup>
 
   <Target Name="RestoreClient" Inputs="$(ClientRoot)package-lock.json" Outputs="$(ClientRoot)node_modules/.package-lock.json">
@@ -27,6 +30,29 @@
       <Content Remove="$(ClientBundle)" />
       <Content Include="$(ClientBundle)" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
+  </Target>
+
+  <Target Name="ComputeClientBundleHash" DependsOnTargets="BuildClient">
+    <GetFileHash Files="$(ClientBundle)" Algorithm="SHA256" HashEncoding="base64">
+      <Output TaskParameter="Hash" PropertyName="ComputedClientBundleHash" />
+    </GetFileHash>
+  </Target>
+
+  <!-- The recorded hash is what the layout's integrity attribute and the CSP script-src hash are built from (T7). -->
+  <Target Name="VerifyClientBundleHash" DependsOnTargets="ComputeClientBundleHash" BeforeTargets="CoreCompile">
+    <Error Condition="!Exists('$(ClientBundleHashFile)')" Text="$(ClientBundleHashFile) is missing. Run: dotnet msbuild src/OneShot.Web -t:UpdateClientBundleHash" />
+    <ReadLinesFromFile File="$(ClientBundleHashFile)">
+      <Output TaskParameter="Lines" ItemName="RecordedClientBundleHashLine" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <RecordedClientBundleHash>@(RecordedClientBundleHashLine)</RecordedClientBundleHash>
+    </PropertyGroup>
+    <Error Condition="'$(RecordedClientBundleHash.Trim())' != '$(ComputedClientBundleHash)'" Text="Client bundle hash is stale: $(ClientBundleHashFile) records '$(RecordedClientBundleHash)' but $(ClientBundle) hashes to '$(ComputedClientBundleHash)'. Review the bundle change, then run: dotnet msbuild src/OneShot.Web -t:UpdateClientBundleHash" />
+  </Target>
+
+  <Target Name="UpdateClientBundleHash" DependsOnTargets="ComputeClientBundleHash">
+    <WriteLinesToFile File="$(ClientBundleHashFile)" Lines="$(ComputedClientBundleHash)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <Message Importance="high" Text="Recorded client bundle hash $(ComputedClientBundleHash) in $(ClientBundleHashFile)." />
   </Target>
 
 </Project>

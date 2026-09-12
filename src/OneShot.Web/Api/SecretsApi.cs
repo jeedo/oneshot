@@ -24,7 +24,30 @@ internal static class SecretsApi
     public static IEndpointRouteBuilder MapSecretsApi(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/secrets", CreateAsync);
+        app.MapMethods("/api/secrets/{id}", [HttpMethods.Get, HttpMethods.Head], Peek);
         return app;
+    }
+
+    // Read-only by construction: it only ever calls Peek, so scanners and prefetchers cannot burn a secret.
+    private static IResult Peek(HttpContext context, string id, ISecretStore store)
+    {
+        var peek = SecretId.IsValid(id) ? store.Peek(id) : new SecretPeek(SecretState.Unknown, null);
+        var status = peek.State == SecretState.Unknown ? StatusCodes.Status404NotFound : StatusCodes.Status200OK;
+
+        if (HttpMethods.IsHead(context.Request.Method))
+        {
+            context.Response.StatusCode = status;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            return Results.Empty;
+        }
+
+        var state = peek.State switch
+        {
+            SecretState.Available => "available",
+            SecretState.Consumed => "consumed",
+            _ => "unknown",
+        };
+        return Results.Json(new PeekSecretResponse(state, peek.ExpiresAtUtc), statusCode: status);
     }
 
     private static async Task<IResult> CreateAsync(HttpContext context, ISecretStore store, AuditLogger audit, CancellationToken cancellationToken)
@@ -96,4 +119,6 @@ internal static class SecretsApi
     private sealed record CreateSecretRequest(string? Ciphertext, string? Nonce, int? TtlSeconds);
 
     private sealed record CreateSecretResponse(string Id, DateTimeOffset ExpiresAt);
+
+    private sealed record PeekSecretResponse(string State, DateTimeOffset? ExpiresAt);
 }

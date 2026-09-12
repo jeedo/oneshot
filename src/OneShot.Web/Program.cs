@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 
+using OneShot.Web.Audit;
 using OneShot.Web.Secrets;
 using OneShot.Web.Security;
 
@@ -22,6 +23,7 @@ builder.Services.AddHostedService(provider => new ExpirySweeperService(
     provider.GetRequiredService<TimeProvider>(),
     provider.GetRequiredService<IOptions<SweeperOptions>>().Value,
     provider.GetRequiredService<ILogger<ExpirySweeperService>>()));
+builder.Services.AddSingleton<AuditLogger>();
 
 builder.Services.AddRazorPages();
 builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();

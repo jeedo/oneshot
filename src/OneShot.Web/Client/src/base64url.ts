@@ -8,7 +8,7 @@ export function encode(bytes: Uint8Array): string {
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
 
-export function decode(text: string): Uint8Array {
+export function decode(text: string): Uint8Array<ArrayBuffer> {
   if (!VALID.test(text) || text.length % 4 === 1) {
     throw new RangeError('Invalid base64url input.');
   }

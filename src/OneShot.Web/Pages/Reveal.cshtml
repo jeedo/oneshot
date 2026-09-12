@@ -8,5 +8,13 @@
     <p>
         <button type="button" id="reveal" disabled>Reveal secret</button>
     </p>
-    <p>Revealing destroys the secret on the server. Copy it before you close this page.</p>
+    <div id="result" hidden>
+        <p>
+            <label for="plaintext">Secret</label>
+            <button type="button" id="copy">Copy</button>
+        </p>
+        <pre id="plaintext" tabindex="0"></pre>
+        <p>This secret has now been destroyed on the server. Copy it before you close this page.</p>
+    </div>
+    <p id="warning">Revealing destroys the secret on the server.</p>
 </section>

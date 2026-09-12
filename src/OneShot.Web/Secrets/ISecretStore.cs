@@ -43,6 +43,17 @@ internal abstract record CreateResult;
 
 internal sealed record Created(string Id, DateTimeOffset ExpiresAtUtc) : CreateResult;
 
+internal enum ValidationFailure
+{
+    CiphertextTooShort,
+    CiphertextTooLong,
+    NonceLength,
+    TimeToLiveTooShort,
+    TimeToLiveTooLong,
+}
+
+internal sealed record ValidationError(ValidationFailure Failure) : CreateResult;
+
 internal interface ISecretStore
 {
     CreateResult Create(byte[] ciphertext, byte[] nonce, TimeSpan timeToLive);

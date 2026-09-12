@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>OneShot.Web</RootNamespace>
+    <UserSecretsId>oneshot-web</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OneShot.Tests" />
+  </ItemGroup>
+
+</Project>

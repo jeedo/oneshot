@@ -62,6 +62,19 @@ npm --prefix src/OneShot.Web/Client run check        # tsc --noEmit, vitest, esb
 
 Fix all errors before proceeding.
 
+Coverage is measured on demand (and in CI from plan task 45) rather than on every commit:
+
+```bash
+dotnet test OneShot.sln --collect:"XPlat Code Coverage" \
+    --settings coverlet.runsettings --results-directory artifacts/coverage
+python3 scripts/check_coverage.py                    # per-area table; fails below the gate
+```
+
+The gate is 90 % lines and 85 % branches for `OneShot.Web.{Api,Audit,Secrets,Security}` — the domain,
+endpoint, security and audit code where a silent regression would matter. `OneShot.Web.Pages` and the startup
+file are reported but not gated: they are covered by the browser suite, where line counts over generated
+markup mean little.
+
 End-to-end tests are slower and run separately (and in CI from plan task 45):
 
 ```bash
@@ -128,5 +141,6 @@ Run from the project root:
 | `complete_task.py` | `python3 scripts/complete_task.py <N>` | Mark task N as complete |
 | `get_phase_tasks.py` | `python3 scripts/get_phase_tasks.py <phase>` | List tasks for a phase (by name or number) |
 | `check_threat_coverage.py` | `python3 scripts/check_threat_coverage.py` | Fail if a threat in `threat-model.md` has no `[Trait("Threat", "T#")]` or `describe('[T#] …')` test |
+| `check_coverage.py` | `python3 scripts/check_coverage.py [dir]` | Report per-area line and branch coverage from a cobertura run and fail below the gate |
 
 The scripts' own tests run with `python3 -m unittest discover -s scripts -p 'test_*.py'`.

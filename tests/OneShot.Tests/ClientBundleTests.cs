@@ -1,18 +1,18 @@
 using System.Net;
 using System.Text.Json;
 
-using Microsoft.AspNetCore.Mvc.Testing;
+using OneShot.Tests.Infrastructure;
 
 namespace OneShot.Tests;
 
 [Trait("Threat", "T14")]
-public sealed class ClientBundleTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class ClientBundleTests : IClassFixture<OneShotFactory>
 {
     private static readonly string ClientRoot = Path.Combine(RepoPaths.Root, "src", "OneShot.Web", "Client");
 
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly OneShotFactory _factory;
 
-    public ClientBundleTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public ClientBundleTests(OneShotFactory factory) => _factory = factory;
 
     [Fact]
     public void PackageJson_HasNoRuntimeDependencies()

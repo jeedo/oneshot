@@ -11,15 +11,15 @@ namespace OneShot.Tests.Secrets;
 
 [Trait("Threat", "T5")]
 [Trait("Threat", "T6")]
-public sealed class ExpirySweeperServiceTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class ExpirySweeperServiceTests : IClassFixture<OneShotFactory>
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 12, 12, 0, 0, TimeSpan.Zero);
 
     private readonly FakeTimeProvider _clock = new(Now);
     private readonly InMemorySecretStore _store;
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly OneShotFactory _factory;
 
-    public ExpirySweeperServiceTests(WebApplicationFactory<Program> factory)
+    public ExpirySweeperServiceTests(OneShotFactory factory)
     {
         _factory = factory;
         _store = new InMemorySecretStore(_clock);

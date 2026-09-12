@@ -1,14 +1,14 @@
 using System.Net;
 
-using Microsoft.AspNetCore.Mvc.Testing;
+using OneShot.Tests.Infrastructure;
 
 namespace OneShot.Tests;
 
-public sealed class SmokeTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class SmokeTests : IClassFixture<OneShotFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly OneShotFactory _factory;
 
-    public SmokeTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public SmokeTests(OneShotFactory factory) => _factory = factory;
 
     [Fact]
     public async Task IndexPage_ReturnsOkHtml()

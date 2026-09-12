@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.Extensions.DependencyInjection;
 
+using OneShot.Tests.Infrastructure;
 using OneShot.Web.Security;
 
 namespace OneShot.Tests;
@@ -98,12 +99,13 @@ public sealed class KestrelHardeningTests : IClassFixture<KestrelHardeningTests.
         Assert.Equal(HttpStatusCode.RequestHeaderFieldsTooLarge, response.StatusCode);
     }
 
-    public sealed class KestrelFactory : WebApplicationFactory<Program>
+    public sealed class KestrelFactory : OneShotFactory
     {
         public KestrelFactory() => UseKestrel();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
+            base.ConfigureWebHost(builder);
             builder.ConfigureServices(services => services.AddTransient<IStartupFilter, DrainEndpointFilter>());
         }
 

@@ -2,13 +2,14 @@ using System.Net;
 
 using Microsoft.AspNetCore.Mvc.Testing;
 
+using OneShot.Tests.Infrastructure;
 using OneShot.Web;
 
 namespace OneShot.Tests;
 
 [Trait("Threat", "T7")]
 [Trait("Threat", "T8")]
-public sealed class SecurityHeadersTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class SecurityHeadersTests : IClassFixture<OneShotFactory>
 {
     private const string ExpectedPermissionsPolicy =
         "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), "
@@ -20,9 +21,9 @@ public sealed class SecurityHeadersTests : IClassFixture<WebApplicationFactory<P
         $"default-src 'none'; script-src '{ClientBundle.Integrity}'; style-src 'self'; connect-src 'self'; "
         + "img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly OneShotFactory _factory;
 
-    public SecurityHeadersTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public SecurityHeadersTests(OneShotFactory factory) => _factory = factory;
 
     [Theory]
     [InlineData("/")]

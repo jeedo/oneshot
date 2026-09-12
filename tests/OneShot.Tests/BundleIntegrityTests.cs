@@ -2,18 +2,17 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
-using Microsoft.AspNetCore.Mvc.Testing;
-
+using OneShot.Tests.Infrastructure;
 using OneShot.Web;
 
 namespace OneShot.Tests;
 
 [Trait("Threat", "T7")]
-public sealed partial class BundleIntegrityTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed partial class BundleIntegrityTests : IClassFixture<OneShotFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly OneShotFactory _factory;
 
-    public BundleIntegrityTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public BundleIntegrityTests(OneShotFactory factory) => _factory = factory;
 
     [Fact]
     public void RecordedHash_IsBase64Sha256Digest()

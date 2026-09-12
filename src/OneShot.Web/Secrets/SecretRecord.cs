@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 
 namespace OneShot.Web.Secrets;
 
-internal sealed class SecretRecord
+internal sealed class SecretRecord : ISecretEntry
 {
     public SecretRecord(string id, byte[] ciphertext, byte[] nonce, DateTimeOffset createdAtUtc, DateTimeOffset expiresAtUtc)
     {

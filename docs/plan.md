@@ -13,7 +13,7 @@ one branch, written tests-first (red → green).
 | ID | Attack / vulnerability vector | Primary mitigation (see architecture.md) |
 |----|-------------------------------|------------------------------------------|
 | T1 | Server-side exposure of plaintext or key (zero-knowledge violation) via request bodies, logs, exceptions, crash dumps | Client-side AES-256-GCM; key only in URL fragment; audit logger structurally unable to see payloads |
-| T2 | Double-read: two recipients both succeed via a read-then-delete race | Single atomic `TryRemove`-based `TryConsume`; tombstone after consumption |
+| T2 | Double-read: two recipients both succeed via a read-then-delete race | Single compare-and-swap `TryConsume` (`TryUpdate` record → tombstone); tombstone after consumption |
 | T3 | Secret Id enumeration / brute force | 128-bit CSPRNG Ids; per-IP rate limiting; uniform 404 responses |
 | T4 | Pre-burn by link scanners, prefetchers, or cross-site (CSRF) triggering of the reveal | Side-effect-free `GET`; reveal only via same-origin `POST` with custom header; no CORS |
 | T5 | Secret material reaching disk: logs, Data Protection key ring, container volumes, swap/crash dumps | In-memory-only store; ephemeral Data Protection; read-only container FS; buffers zeroed on consume/evict |
@@ -43,7 +43,7 @@ one branch, written tests-first (red → green).
 - [x] 8. Define `SecretRecord` (`Id`, `Ciphertext: byte[]`, `Nonce: byte[]`, `CreatedAtUtc`, `ExpiresAtUtc`), the `ConsumedSecret` disposable wrapper that zeroes its buffers on `Dispose`, and the `ISecretStore` interface (`Create`, `Peek`, `TryConsume`) taking a `TimeProvider` so expiry is deterministic in tests. (T1)
 - [x] 9. Implement secret Id generation: 16 bytes from `RandomNumberGenerator`, base64url-encoded to a fixed 22 characters — never `Guid.NewGuid()` or `System.Random`. (T3, T9)
 - [x] 10. Implement `InMemorySecretStore.Create` with validation: ciphertext between 16 bytes (GCM tag) and 64 KiB, nonce exactly 12 bytes, TTL within 60 s – 7 days (default 1 h); failures return a typed `ValidationError` that never includes the submitted value. (T12)
-- [ ] 11. Implement `TryConsume` as one `ConcurrentDictionary.TryRemove` followed by insertion of a payload-free tombstone (`ConsumedAtUtc`, original `ExpiresAtUtc`), returning a `ConsumedSecret`; a second caller observes the tombstone, never the payload. (T2)
+- [x] 11. Implement `TryConsume` as one `ConcurrentDictionary.TryUpdate` that swaps the record for a payload-free tombstone (`ConsumedAtUtc`, original `ExpiresAtUtc`), returning a `ConsumedSecret`; a second caller observes the tombstone — never the payload, and never a gap where the Id is missing. (T2)
 - [ ] 12. Implement `Peek` returning only `{ State: Available | Consumed | Unknown, ExpiresAt }`; expired secrets and tombstones read as `Unknown` and are lazily evicted and zeroed. (T2, T5)
 - [ ] 13. Implement capacity limits: configurable max entries (default 10,000) and max total ciphertext bytes (default 64 MiB), accounted atomically with insert/evict; `Create` returns `CapacityExceeded` rather than storing when either cap would be crossed. (T6)
 - [ ] 14. Implement `ExpirySweeperService` (`BackgroundService`, 30 s period, `TimeProvider`-driven) that evicts and zeroes expired secrets and tombstones with a bounded per-pass scan and per-pass exception isolation so one fault never stops later sweeps. (T5, T6)

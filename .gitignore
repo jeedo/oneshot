@@ -486,6 +486,9 @@ $RECYCLE.BIN/
 # OneShot client bundle (built from src/OneShot.Web/Client by MSBuild)
 src/OneShot.Web/wwwroot/js/oneshot.js
 
+# Coverage reports
+artifacts/
+
 # Playwright output
 tests/e2e/test-results/
 tests/e2e/playwright-report/

@@ -61,6 +61,17 @@ npm --prefix src/OneShot.Web/Client run check        # tsc --noEmit, vitest, esb
 
 Fix all errors before proceeding.
 
+End-to-end tests are slower and run separately (and in CI from plan task 45):
+
+```bash
+npm --prefix tests/e2e ci                            # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 is already set here
+npm --prefix tests/e2e run check                     # tsc --noEmit, then Playwright against a self-started app
+```
+
+`playwright.config.ts` starts `dotnet run` itself and waits for `/healthz`, so no server needs to be running
+first. Chromium is pre-installed at `PLAYWRIGHT_BROWSERS_PATH`; never run `playwright install`, and keep
+`@playwright/test` pinned to the version matching that browser build.
+
 ---
 
 ## Environment Notes

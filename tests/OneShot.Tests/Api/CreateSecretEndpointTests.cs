@@ -7,7 +7,6 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Time.Testing;
 
 using OneShot.Tests.Infrastructure;
 using OneShot.Web.Secrets;
@@ -16,19 +15,21 @@ namespace OneShot.Tests.Api;
 
 [Trait("Threat", "T6")]
 [Trait("Threat", "T12")]
-public sealed class CreateSecretEndpointTests : IClassFixture<CapturingWebApplicationFactory>
+public sealed class CreateSecretEndpointTests : IClassFixture<CapturingWebApplicationFactory>, IDisposable
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 12, 12, 0, 0, TimeSpan.Zero);
     private static readonly Uri Endpoint = new("/api/secrets", UriKind.Relative);
 
     private readonly CapturingWebApplicationFactory _factory;
-    private readonly WebApplicationFactory<Program> _app;
+    private readonly FakeTimeApp _app;
 
     public CreateSecretEndpointTests(CapturingWebApplicationFactory factory)
     {
         _factory = factory;
-        _app = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services => services.AddSingleton<TimeProvider>(new FakeTimeProvider(Now))));
+        _app = factory.WithFakeTime(Now);
     }
+
+    public void Dispose() => _app.Dispose();
 
     [Fact]
     public async Task ValidRequest_StoresTheSecret_AndReturnsIdAndExpiry()
@@ -44,7 +45,7 @@ public sealed class CreateSecretEndpointTests : IClassFixture<CapturingWebApplic
         var id = body.RootElement.GetProperty("id").GetString();
         Assert.True(SecretId.IsValid(id));
         Assert.Equal(Now.AddSeconds(120), body.RootElement.GetProperty("expiresAt").GetDateTimeOffset());
-        Assert.Equal(SecretState.Available, _app.Services.GetRequiredService<ISecretStore>().Peek(id!).State);
+        Assert.Equal(SecretState.Available, _app.Service<ISecretStore>().Peek(id!).State);
     }
 
     [Fact]
@@ -187,7 +188,7 @@ public sealed class CreateSecretEndpointTests : IClassFixture<CapturingWebApplic
         Assert.DoesNotContain(_factory.Logs.Entries, entry => entry.EventId.Name == "Audit");
     }
 
-    private int StoreCount() => _app.Services.GetRequiredService<InMemorySecretStore>().Count;
+    private int StoreCount() => _app.Service<InMemorySecretStore>().Count;
 
     private static async Task<string> AssertProblem(HttpResponseMessage response, HttpStatusCode status, string code)
     {

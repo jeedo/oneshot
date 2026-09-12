@@ -1,11 +1,27 @@
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Options;
 
+using OneShot.Web.Secrets;
 using OneShot.Web.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel(KestrelHardening.Apply);
 LoggingHardening.Apply(builder.Logging);
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.Configure<SecretStoreOptions>(builder.Configuration.GetSection("SecretStore"));
+builder.Services.Configure<SweeperOptions>(builder.Configuration.GetSection("Sweeper"));
+builder.Services.AddSingleton(provider => new InMemorySecretStore(
+    provider.GetRequiredService<TimeProvider>(),
+    provider.GetRequiredService<IOptions<SecretStoreOptions>>().Value));
+builder.Services.AddSingleton<ISecretStore>(provider => provider.GetRequiredService<InMemorySecretStore>());
+builder.Services.AddSingleton<ISweepableSecretStore>(provider => provider.GetRequiredService<InMemorySecretStore>());
+builder.Services.AddHostedService(provider => new ExpirySweeperService(
+    provider.GetRequiredService<ISweepableSecretStore>(),
+    provider.GetRequiredService<TimeProvider>(),
+    provider.GetRequiredService<IOptions<SweeperOptions>>().Value,
+    provider.GetRequiredService<ILogger<ExpirySweeperService>>()));
 
 builder.Services.AddRazorPages();
 builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();

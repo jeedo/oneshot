@@ -46,7 +46,7 @@ one branch, written tests-first (red → green).
 - [x] 11. Implement `TryConsume` as one `ConcurrentDictionary.TryUpdate` that swaps the record for a payload-free tombstone (`ConsumedAtUtc`, original `ExpiresAtUtc`), returning a `ConsumedSecret`; a second caller observes the tombstone — never the payload, and never a gap where the Id is missing. (T2)
 - [x] 12. Implement `Peek` returning only `{ State: Available | Consumed | Unknown, ExpiresAt }`; expired secrets and tombstones read as `Unknown` and are lazily evicted and zeroed. (T2, T5)
 - [x] 13. Implement capacity limits: configurable max entries (default 10,000) and max total ciphertext bytes (default 64 MiB), accounted atomically with insert/evict; `Create` returns `CapacityExceeded` rather than storing when either cap would be crossed. (T6)
-- [ ] 14. Implement `ExpirySweeperService` (`BackgroundService`, 30 s period, `TimeProvider`-driven) that evicts and zeroes expired secrets and tombstones with a bounded per-pass scan and per-pass exception isolation so one fault never stops later sweeps. (T5, T6)
+- [x] 14. Implement `ExpirySweeperService` (`BackgroundService`, 30 s period, `TimeProvider`-driven) that evicts and zeroes expired secrets and tombstones with a bounded per-pass scan and per-pass exception isolation so one fault never stops later sweeps. (T5, T6)
 - [ ] 15. Implement `AuditLogger.Log(AuditAction, string secretId, ClaimsPrincipal user)` emitting exactly `{ timestampUtc, action, secretId, windowsUser }` with `windowsUser = "anonymous"` unless the principal came from the identity cookie (task 19); the type has no dependency on `SecretRecord`, so it cannot log payloads. (T1, T10)
 
 ## Phase 3: API / Interface

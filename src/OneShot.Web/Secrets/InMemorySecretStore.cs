@@ -4,7 +4,7 @@ namespace OneShot.Web.Secrets;
 
 internal sealed class InMemorySecretStore : ISecretStore
 {
-    private readonly ConcurrentDictionary<string, SecretRecord> _records = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ISecretEntry> _entries = new(StringComparer.Ordinal);
     private readonly TimeProvider _clock;
 
     public InMemorySecretStore(TimeProvider clock)
@@ -13,7 +13,7 @@ internal sealed class InMemorySecretStore : ISecretStore
         _clock = clock;
     }
 
-    public int Count => _records.Count;
+    public int Count => _entries.Count;
 
     // The store takes ownership of both buffers so it can zero them on consume or evict.
     public CreateResult Create(byte[] ciphertext, byte[] nonce, TimeSpan timeToLive)
@@ -32,7 +32,7 @@ internal sealed class InMemorySecretStore : ISecretStore
         while (true)
         {
             var record = new SecretRecord(SecretId.NewId(), ciphertext, nonce, now, expiresAtUtc);
-            if (_records.TryAdd(record.Id, record))
+            if (_entries.TryAdd(record.Id, record))
             {
                 return new Created(record.Id, expiresAtUtc);
             }
@@ -41,7 +41,46 @@ internal sealed class InMemorySecretStore : ISecretStore
 
     public SecretPeek Peek(string id) => throw new NotImplementedException();
 
-    public ConsumeResult TryConsume(string id) => throw new NotImplementedException();
+    // Consumption is a compare-and-swap of the record for its tombstone: exactly one caller's TryUpdate can
+    // succeed against the same record instance, and no caller ever observes a gap where the Id is missing.
+    public ConsumeResult TryConsume(string id)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+
+        while (true)
+        {
+            if (!_entries.TryGetValue(id, out var entry))
+            {
+                return ConsumeResult.Unknown;
+            }
+
+            var now = _clock.GetUtcNow();
+            if (now >= entry.ExpiresAtUtc)
+            {
+                Evict(entry);
+                return ConsumeResult.Unknown;
+            }
+
+            if (entry is not SecretRecord record)
+            {
+                return ConsumeResult.AlreadyConsumed;
+            }
+
+            var tombstone = new Tombstone(id, now, record.ExpiresAtUtc);
+            if (_entries.TryUpdate(id, tombstone, record))
+            {
+                return ConsumeResult.Consumed(new ConsumedSecret(record.Ciphertext, record.Nonce));
+            }
+        }
+    }
+
+    private void Evict(ISecretEntry entry)
+    {
+        if (_entries.TryRemove(new KeyValuePair<string, ISecretEntry>(entry.Id, entry)) && entry is SecretRecord record)
+        {
+            record.Zero();
+        }
+    }
 
     private static ValidationFailure? Validate(byte[] ciphertext, byte[] nonce, TimeSpan timeToLive)
     {

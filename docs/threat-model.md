@@ -131,7 +131,7 @@ Each table lists the threats that apply to the component, the register ID, and w
 
 | STRIDE | Threat | ID | Mitigation (task) |
 |--------|--------|----|-------------------|
-| Tampering | Race: two callers both receive the ciphertext | T2 | `TryConsume` is one `ConcurrentDictionary.TryRemove`; second caller sees the tombstone (11, 27) |
+| Tampering | Race: two callers both receive the ciphertext | T2 | `TryConsume` is one `ConcurrentDictionary.TryUpdate` swapping the record for its tombstone; the second caller sees the tombstone and never a gap (11, 27) |
 | Info disclosure | Ciphertext reaches disk or lingers in memory | T5 | No persistence layer of any kind; buffers zeroed on consume and evict; `ConsumedSecret` zeroes on dispose (8, 11, 12, 28, 36) |
 | Info disclosure | Server can decrypt | T1, T9 | `OneShot.Web` references no `System.Security.Cryptography.Aes*` type; architecture test enforces it (36) |
 | Denial of service | Memory exhaustion | T6 | Entry cap (10,000) and byte cap (64 MiB) accounted atomically (13, 39) |

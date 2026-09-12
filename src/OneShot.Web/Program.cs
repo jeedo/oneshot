@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 
+using OneShot.Web.Api;
 using OneShot.Web.Audit;
 using OneShot.Web.Secrets;
 using OneShot.Web.Security;
@@ -40,6 +41,7 @@ app.UseHsts();
 app.UseHttpsRedirection();
 app.UseSecurityHeaders();
 app.UseStaticFiles();
+app.MapSecretsApi();
 app.MapRazorPages();
 
 app.Run();

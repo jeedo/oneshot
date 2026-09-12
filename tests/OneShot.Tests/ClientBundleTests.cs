@@ -8,7 +8,7 @@ namespace OneShot.Tests;
 [Trait("Threat", "T14")]
 public sealed class ClientBundleTests : IClassFixture<WebApplicationFactory<Program>>
 {
-    private static readonly string ClientRoot = Path.Combine(RepoRoot(), "src", "OneShot.Web", "Client");
+    private static readonly string ClientRoot = Path.Combine(RepoPaths.Root, "src", "OneShot.Web", "Client");
 
     private readonly WebApplicationFactory<Program> _factory;
 
@@ -40,16 +40,5 @@ public sealed class ClientBundleTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/javascript", response.Content.Headers.ContentType?.MediaType);
         Assert.NotEmpty(await response.Content.ReadAsStringAsync());
-    }
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "OneShot.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("OneShot.sln not found above the test directory.");
     }
 }

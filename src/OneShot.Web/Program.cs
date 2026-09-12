@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 
@@ -26,6 +28,12 @@ builder.Services.AddHostedService(provider => new ExpirySweeperService(
     provider.GetRequiredService<ILogger<ExpirySweeperService>>()));
 builder.Services.AddSingleton<AuditLogger>();
 
+builder.Services.AddAuthentication(IdentityCookie.Scheme)
+    .AddNegotiate()
+    .AddCookie(IdentityCookie.Scheme, IdentityCookie.Configure);
+builder.Services.AddOptions<CookieAuthenticationOptions>(IdentityCookie.Scheme)
+    .Configure<TimeProvider>((options, clock) => options.TimeProvider = clock);
+
 builder.Services.AddRazorPages();
 builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
 builder.Services.AddHsts(options =>
@@ -41,7 +49,9 @@ app.UseHsts();
 app.UseHttpsRedirection();
 app.UseSecurityHeaders();
 app.UseStaticFiles();
+app.UseAuthentication();
 app.MapSecretsApi();
+app.MapWhoAmI();
 app.MapRazorPages();
 
 app.Run();

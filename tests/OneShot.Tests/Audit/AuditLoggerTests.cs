@@ -13,7 +13,7 @@ namespace OneShot.Tests.Audit;
 
 [Trait("Threat", "T1")]
 [Trait("Threat", "T10")]
-public sealed class AuditLoggerTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class AuditLoggerTests : IClassFixture<OneShotFactory>
 {
     private const string Id = "abcdefghijklmnopqrstuA";
 
@@ -21,9 +21,9 @@ public sealed class AuditLoggerTests : IClassFixture<WebApplicationFactory<Progr
 
     private readonly LogSink _sink = new();
     private readonly AuditLogger _audit;
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly OneShotFactory _factory;
 
-    public AuditLoggerTests(WebApplicationFactory<Program> factory)
+    public AuditLoggerTests(OneShotFactory factory)
     {
         _factory = factory;
         var logger = LoggerFactory.Create(builder => builder.AddProvider(_sink)).CreateLogger<AuditLogger>();

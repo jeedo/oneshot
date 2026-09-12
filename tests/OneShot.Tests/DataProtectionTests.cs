@@ -1,15 +1,16 @@
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+
+using OneShot.Tests.Infrastructure;
 
 namespace OneShot.Tests;
 
 [Trait("Threat", "T5")]
-public sealed class DataProtectionTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class DataProtectionTests : IClassFixture<OneShotFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly OneShotFactory _factory;
 
-    public DataProtectionTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public DataProtectionTests(OneShotFactory factory) => _factory = factory;
 
     [Fact]
     public void KeyRing_IsEphemeral_AndNeverPersisted()

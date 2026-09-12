@@ -14,6 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ClientSource Include="$(ClientRoot)src/**/*.ts" Exclude="$(ClientRoot)src/**/*.test.ts" />
     <ClientSource Include="$(ClientRoot)package.json;$(ClientRoot)package-lock.json;$(ClientRoot)tsconfig.json" />
     <None Remove="$(ClientBundleHashFile)" />

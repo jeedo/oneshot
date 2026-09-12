@@ -17,6 +17,58 @@ export class ApiError extends Error {
 
 export type CreateSecretFn = (ciphertext: Uint8Array, nonce: Uint8Array, ttlSeconds: number) => Promise<CreatedSecret>;
 
+export type SecretState = 'available' | 'consumed' | 'unknown';
+
+export interface SecretPeek {
+  state: SecretState;
+  expiresAt: string | null;
+}
+
+export type PeekSecretFn = (id: string) => Promise<SecretPeek>;
+
+export type WhoAmIFn = () => Promise<string | null>;
+
+const WHOAMI_TIMEOUT_MS = 2000;
+
+// A plain GET with no custom header: it can never consume a secret.
+export async function peekSecret(id: string, fetchFn: typeof fetch = fetch): Promise<SecretPeek> {
+  const response = await fetchFn(`/api/secrets/${id}`, {
+    method: 'GET',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    referrerPolicy: 'no-referrer',
+  });
+  if (response.status !== 200 && response.status !== 404) {
+    throw new ApiError(response.status, await problemCode(response));
+  }
+
+  const peek = (await response.json().catch(() => ({}))) as { state?: unknown; expiresAt?: unknown };
+  if (peek.state !== 'available' && peek.state !== 'consumed' && peek.state !== 'unknown') {
+    throw new ApiError(response.status, 'unknown');
+  }
+  return { state: peek.state, expiresAt: typeof peek.expiresAt === 'string' ? peek.expiresAt : null };
+}
+
+// Best effort: any failure, challenge, or timeout simply means anonymous.
+export async function whoami(fetchFn: typeof fetch = fetch): Promise<string | null> {
+  try {
+    const response = await fetchFn('/api/whoami', {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
+      signal: AbortSignal.timeout(WHOAMI_TIMEOUT_MS),
+    });
+    if (response.status !== 200) {
+      return null;
+    }
+    const body = (await response.json()) as { windowsUser?: unknown };
+    return typeof body.windowsUser === 'string' && body.windowsUser.length > 0 ? body.windowsUser : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createSecret(
   ciphertext: Uint8Array,
   nonce: Uint8Array,

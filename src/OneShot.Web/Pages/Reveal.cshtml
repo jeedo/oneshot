@@ -1,0 +1,12 @@
+@page "/s/{id}"
+<h1>OneShot</h1>
+<section data-page="reveal">
+    <p id="status" role="status">Checking this secret&hellip;</p>
+    <p id="expiry" hidden></p>
+    <p id="error" role="alert" hidden></p>
+    <p id="identity" hidden></p>
+    <p>
+        <button type="button" id="reveal" disabled>Reveal secret</button>
+    </p>
+    <p>Revealing destroys the secret on the server. Copy it before you close this page.</p>
+</section>

@@ -1,6 +1,6 @@
 # Claude Instructions — OneShot
 
-OneShot is a .NET 8 web app for sharing a secret that can be read exactly once. Security is the primary
+OneShot is a .NET 10 web app for sharing a secret that can be read exactly once. Security is the primary
 quality attribute: the server never sees plaintext or the decryption key, the encrypted secret lives only in
 memory, and consumption is atomic. The design and its rationale live in the docs below — read them before
 touching code.
@@ -62,9 +62,9 @@ Fix all errors before proceeding. Client-side (TypeScript) checks are added by p
 
 ## Environment Notes
 
-- The .NET SDK is pinned by `global.json` (8.0, `latestFeature` roll-forward).
+- The .NET SDK is pinned by `global.json` (10.0, `latestFeature` roll-forward).
 - In Claude Code on the web the egress proxy blocks `builds.dotnet.microsoft.com`, so the dotnet-install script
-  fails. Install from the Ubuntu archive instead: `apt-get update && apt-get install -y dotnet-sdk-8.0`.
+  fails. Install from the Ubuntu archive instead: `apt-get update && apt-get install -y dotnet-sdk-10.0`.
   NuGet (`api.nuget.org`) is reachable.
 - Node.js is required for the client crypto module from plan task 2 onward.
 

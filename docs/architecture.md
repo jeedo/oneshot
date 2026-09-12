@@ -42,7 +42,7 @@ decryption key or the plaintext.
 
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
-| Backend runtime | ASP.NET Core 8, Minimal APIs | Modern, first-class .NET web framework; Minimal APIs keep the small surface area (4 endpoints) simple with no MVC ceremony |
+| Backend runtime | ASP.NET Core 10, Minimal APIs | Modern, first-class .NET web framework; Minimal APIs keep the small surface area (4 endpoints) simple with no MVC ceremony |
 | Secret storage | In-process `ConcurrentDictionary<string, SecretRecord>` behind an `ISecretStore` abstraction | Satisfies "never to disk" by construction; `TryRemove` gives the atomic get-and-delete needed for one-time consumption (see research §4) |
 | Background expiry | `IHostedService` timer sweep | Purges expired, unread ciphertext from memory even if the recipient never opens the link |
 | Client-side cryptography | Web Crypto API (`SubtleCrypto`), AES-256-GCM, vanilla TypeScript | Runs in the sharer's and recipient's browsers so the server never sees plaintext or the key (zero-knowledge design, research §1) |

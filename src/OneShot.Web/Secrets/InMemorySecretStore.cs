@@ -39,7 +39,24 @@ internal sealed class InMemorySecretStore : ISecretStore
         }
     }
 
-    public SecretPeek Peek(string id) => throw new NotImplementedException();
+    public SecretPeek Peek(string id)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+
+        if (!_entries.TryGetValue(id, out var entry))
+        {
+            return new SecretPeek(SecretState.Unknown, null);
+        }
+
+        if (_clock.GetUtcNow() >= entry.ExpiresAtUtc)
+        {
+            Evict(entry);
+            return new SecretPeek(SecretState.Unknown, null);
+        }
+
+        var state = entry is SecretRecord ? SecretState.Available : SecretState.Consumed;
+        return new SecretPeek(state, entry.ExpiresAtUtc);
+    }
 
     // Consumption is a compare-and-swap of the record for its tombstone: exactly one caller's TryUpdate can
     // succeed against the same record instance, and no caller ever observes a gap where the Id is missing.

@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 
 namespace OneShot.Web.Secrets;
 
-internal sealed class InMemorySecretStore : ISecretStore
+internal sealed class InMemorySecretStore : ISecretStore, ISweepableSecretStore
 {
     private readonly ConcurrentDictionary<string, ISecretEntry> _entries = new(StringComparer.Ordinal);
     private readonly TimeProvider _clock;
@@ -10,6 +10,7 @@ internal sealed class InMemorySecretStore : ISecretStore
     private readonly long _maxCiphertextBytes;
     private int _entryCount;
     private long _ciphertextBytes;
+    private int _sweepOffset;
 
     public InMemorySecretStore(TimeProvider clock, SecretStoreOptions? options = null)
     {
@@ -109,6 +110,42 @@ internal sealed class InMemorySecretStore : ISecretStore
         }
     }
 
+    // Each pass scans at most maxScan entries and resumes after the surviving entries it already scanned,
+    // so a bounded pass still visits every entry over successive passes.
+    public int SweepExpired(int maxScan)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxScan);
+
+        var now = _clock.GetUtcNow();
+        var offset = _sweepOffset;
+        var index = 0;
+        var scanned = 0;
+        var evicted = 0;
+
+        foreach (var pair in _entries)
+        {
+            if (index++ < offset)
+            {
+                continue;
+            }
+
+            if (scanned == maxScan)
+            {
+                _sweepOffset = offset + scanned - evicted;
+                return evicted;
+            }
+
+            scanned++;
+            if (now >= pair.Value.ExpiresAtUtc && Evict(pair.Value))
+            {
+                evicted++;
+            }
+        }
+
+        _sweepOffset = 0;
+        return evicted;
+    }
+
     // Capacity is reserved before insertion and released on rejection, consume, or evict, so concurrent
     // creates can never overshoot either cap.
     private CapacityLimit? Reserve(int ciphertextLength)
@@ -129,11 +166,11 @@ internal sealed class InMemorySecretStore : ISecretStore
         return null;
     }
 
-    private void Evict(ISecretEntry entry)
+    private bool Evict(ISecretEntry entry)
     {
         if (!_entries.TryRemove(new KeyValuePair<string, ISecretEntry>(entry.Id, entry)))
         {
-            return;
+            return false;
         }
 
         Interlocked.Decrement(ref _entryCount);
@@ -142,6 +179,8 @@ internal sealed class InMemorySecretStore : ISecretStore
             Interlocked.Add(ref _ciphertextBytes, -record.Ciphertext.Length);
             record.Zero();
         }
+
+        return true;
     }
 
     private static ValidationFailure? Validate(byte[] ciphertext, byte[] nonce, TimeSpan timeToLive)

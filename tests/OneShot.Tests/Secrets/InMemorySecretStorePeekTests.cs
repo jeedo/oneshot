@@ -1,4 +1,5 @@
-using OneShot.Tests.Infrastructure;
+using Microsoft.Extensions.Time.Testing;
+
 using OneShot.Web.Secrets;
 
 namespace OneShot.Tests.Secrets;
@@ -9,7 +10,7 @@ public sealed class InMemorySecretStorePeekTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 12, 12, 0, 0, TimeSpan.Zero);
 
-    private readonly TestTimeProvider _clock = new(Now);
+    private readonly FakeTimeProvider _clock = new(Now);
     private readonly InMemorySecretStore _store;
 
     public InMemorySecretStorePeekTests() => _store = new InMemorySecretStore(_clock);

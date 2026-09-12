@@ -3,10 +3,30 @@
   <PropertyGroup>
     <RootNamespace>OneShot.Web</RootNamespace>
     <UserSecretsId>oneshot-web</UserSecretsId>
+    <ClientRoot>Client/</ClientRoot>
+    <ClientBundle>wwwroot/js/oneshot.js</ClientBundle>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(ClientRoot)node_modules/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="OneShot.Tests" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ClientSource Include="$(ClientRoot)src/**/*.ts" Exclude="$(ClientRoot)src/**/*.test.ts" />
+    <ClientSource Include="$(ClientRoot)package.json;$(ClientRoot)package-lock.json;$(ClientRoot)tsconfig.json" />
+  </ItemGroup>
+
+  <Target Name="RestoreClient" Inputs="$(ClientRoot)package-lock.json" Outputs="$(ClientRoot)node_modules/.package-lock.json">
+    <Exec Command="npm ci --ignore-scripts --no-audit --no-fund" WorkingDirectory="$(ClientRoot)" />
+  </Target>
+
+  <Target Name="BuildClient" DependsOnTargets="RestoreClient" BeforeTargets="BeforeBuild" Inputs="@(ClientSource)" Outputs="$(ClientBundle)">
+    <Exec Command="npm run build" WorkingDirectory="$(ClientRoot)" />
+    <ItemGroup>
+      <Content Remove="$(ClientBundle)" />
+      <Content Include="$(ClientBundle)" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 
 </Project>

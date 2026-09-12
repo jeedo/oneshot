@@ -482,3 +482,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# OneShot client bundle (built from src/OneShot.Web/Client by MSBuild)
+src/OneShot.Web/wwwroot/js/oneshot.js

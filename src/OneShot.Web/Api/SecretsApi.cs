@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -25,7 +27,63 @@ internal static class SecretsApi
     {
         app.MapPost("/api/secrets", CreateAsync);
         app.MapMethods("/api/secrets/{id}", [HttpMethods.Get, HttpMethods.Head], Peek);
+        app.MapPost("/api/secrets/{id}/reveal", RevealAsync);
         return app;
+    }
+
+    // The only code path that ever returns ciphertext; the policy runs before the store is touched.
+    private static async Task<IResult> RevealAsync(HttpContext context, string id, ISecretStore store, AuditLogger audit, CancellationToken cancellationToken)
+    {
+        if (!RevealPolicy.Allows(context.Request))
+        {
+            return ApiProblems.Forbidden("revealNotAllowed");
+        }
+
+        if (!SecretId.IsValid(id))
+        {
+            return ApiProblems.NotFound("unknown");
+        }
+
+        var result = store.TryConsume(id);
+        switch (result.Outcome)
+        {
+            case ConsumeOutcome.AlreadyConsumed:
+                return ApiProblems.Gone("consumed");
+            case ConsumeOutcome.Unknown:
+                return ApiProblems.NotFound("unknown");
+        }
+
+        using var secret = result.Secret!;
+        audit.Log(AuditAction.Reveal, id, context.User);
+
+        context.Response.StatusCode = StatusCodes.Status200OK;
+        context.Response.ContentType = "application/json; charset=utf-8";
+        await using (var writer = new Utf8JsonWriter(context.Response.BodyWriter))
+        {
+            writer.WriteStartObject();
+            WriteBase64Url(writer, "ciphertext", secret.Ciphertext.Span);
+            WriteBase64Url(writer, "nonce", secret.Nonce.Span);
+            writer.WriteEndObject();
+            await writer.FlushAsync(cancellationToken);
+        }
+
+        await context.Response.BodyWriter.FlushAsync(cancellationToken);
+        return Results.Empty;
+    }
+
+    private static void WriteBase64Url(Utf8JsonWriter writer, string name, ReadOnlySpan<byte> bytes)
+    {
+        var chars = ArrayPool<char>.Shared.Rent(Base64Url.GetEncodedLength(bytes.Length));
+        try
+        {
+            var written = Base64Url.EncodeToChars(bytes, chars);
+            writer.WriteString(name, chars.AsSpan(0, written));
+        }
+        finally
+        {
+            Array.Clear(chars);
+            ArrayPool<char>.Shared.Return(chars);
+        }
     }
 
     // Read-only by construction: it only ever calls Peek, so scanners and prefetchers cannot burn a secret.

@@ -7,6 +7,12 @@ internal static class ApiProblems
 
     public static IResult UnsupportedMediaType() => Problem(StatusCodes.Status415UnsupportedMediaType, "The request body must be JSON.", "unsupportedMediaType");
 
+    public static IResult Forbidden(string code) => Problem(StatusCodes.Status403Forbidden, "The request is not allowed.", code);
+
+    public static IResult NotFound(string code) => Problem(StatusCodes.Status404NotFound, "There is no such secret.", code);
+
+    public static IResult Gone(string code) => Problem(StatusCodes.Status410Gone, "The secret has already been revealed.", code);
+
     public static IResult ServiceUnavailable(HttpResponse response, string code, TimeSpan retryAfter)
     {
         ArgumentNullException.ThrowIfNull(response);

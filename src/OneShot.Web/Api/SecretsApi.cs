@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 
 using OneShot.Web.Audit;
 using OneShot.Web.Secrets;
+using OneShot.Web.Security;
 
 namespace OneShot.Web.Api;
 
@@ -25,9 +26,9 @@ internal static class SecretsApi
 
     public static IEndpointRouteBuilder MapSecretsApi(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/secrets", CreateAsync);
-        app.MapMethods("/api/secrets/{id}", [HttpMethods.Get, HttpMethods.Head], Peek);
-        app.MapPost("/api/secrets/{id}/reveal", RevealAsync);
+        app.MapPost("/api/secrets", CreateAsync).RequireRateLimiting(RateLimiting.CreatePolicy);
+        app.MapMethods("/api/secrets/{id}", [HttpMethods.Get, HttpMethods.Head], Peek).RequireRateLimiting(RateLimiting.ReadPolicy);
+        app.MapPost("/api/secrets/{id}/reveal", RevealAsync).RequireRateLimiting(RateLimiting.ReadPolicy);
         return app;
     }
 

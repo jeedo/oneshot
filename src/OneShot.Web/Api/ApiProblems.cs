@@ -20,6 +20,26 @@ internal static class ApiProblems
         return Problem(StatusCodes.Status503ServiceUnavailable, "The service cannot accept new secrets right now.", code);
     }
 
+    public static async ValueTask WriteTooManyRequestsAsync(HttpContext context, TimeSpan? retryAfter, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var response = context.Response;
+        response.StatusCode = StatusCodes.Status429TooManyRequests;
+        if (retryAfter is { } delay)
+        {
+            response.Headers.RetryAfter = Math.Max(1, (int)Math.Ceiling(delay.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        var problem = new Microsoft.AspNetCore.Mvc.ProblemDetails
+        {
+            Status = StatusCodes.Status429TooManyRequests,
+            Title = "Too many requests.",
+            Extensions = { ["code"] = "rateLimited" },
+        };
+        await response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json", cancellationToken);
+    }
+
     private static IResult Problem(int status, string title, string code)
     {
         return Results.Problem(statusCode: status, title: title, extensions: new Dictionary<string, object?> { ["code"] = code });

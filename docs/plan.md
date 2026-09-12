@@ -40,7 +40,7 @@ one branch, written tests-first (red → green).
 
 ## Phase 2: Core Domain
 
-- [ ] 8. Define `SecretRecord` (`Id`, `Ciphertext: byte[]`, `Nonce: byte[]`, `CreatedAtUtc`, `ExpiresAtUtc`), the `ConsumedSecret` disposable wrapper that zeroes its buffers on `Dispose`, and the `ISecretStore` interface (`Create`, `Peek`, `TryConsume`) taking a `TimeProvider` so expiry is deterministic in tests. (T1)
+- [x] 8. Define `SecretRecord` (`Id`, `Ciphertext: byte[]`, `Nonce: byte[]`, `CreatedAtUtc`, `ExpiresAtUtc`), the `ConsumedSecret` disposable wrapper that zeroes its buffers on `Dispose`, and the `ISecretStore` interface (`Create`, `Peek`, `TryConsume`) taking a `TimeProvider` so expiry is deterministic in tests. (T1)
 - [ ] 9. Implement secret Id generation: 16 bytes from `RandomNumberGenerator`, base64url-encoded to a fixed 22 characters — never `Guid.NewGuid()` or `System.Random`. (T3, T9)
 - [ ] 10. Implement `InMemorySecretStore.Create` with validation: ciphertext between 16 bytes (GCM tag) and 64 KiB, nonce exactly 12 bytes, TTL within 60 s – 7 days (default 1 h); failures return a typed `ValidationError` that never includes the submitted value. (T12)
 - [ ] 11. Implement `TryConsume` as one `ConcurrentDictionary.TryRemove` followed by insertion of a payload-free tombstone (`ConsumedAtUtc`, original `ExpiresAtUtc`), returning a `ConsumedSecret`; a second caller observes the tombstone, never the payload. (T2)

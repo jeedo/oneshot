@@ -9,6 +9,15 @@
     <Deterministic>true</Deterministic>
   </PropertyGroup>
 
+  <PropertyGroup Label="Supply chain">
+    <!-- Every restore records the exact resolved graph, transitive packages included, so a dependency cannot
+         change without the change appearing in a diff (T14). -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- On CI a lock file that no longer matches the project is an error rather than something to rewrite
+         silently: that is the difference between a lock file and a cache. -->
+    <RestoreLockedMode Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+
   <PropertyGroup Label="Analyzers">
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Http.Features;
 
 using OneShot.Web.Security;
 
@@ -15,11 +16,26 @@ internal static class ErrorHandling
         return app.UseExceptionHandler(new ExceptionHandlerOptions
         {
             AllowStatusCode404Response = true,
+
+            // A rejected request is not a fault of ours, so it must not be logged at Error with a stack:
+            // otherwise anyone can fill the log by posting oversized bodies. Genuine faults still log.
+            SuppressDiagnosticsCallback = static context => context.Exception is BadHttpRequestException,
             ExceptionHandler = async context =>
             {
                 // UseExceptionHandler clears the response before invoking this, so the hardening headers
                 // have to be written again or a 500 would ship bare.
                 SecurityHeaders.Apply(context);
+
+                // Kestrel signals a client-side protocol failure — an oversized body, a bad request line,
+                // bad chunking — by throwing, and the exception carries the status it chose. Answering 500
+                // would both mislead the caller and log an error for every one of them, which turns the
+                // body-size limit into a cheap way to fill the log (T6, T13).
+                if (context.Features.Get<IExceptionHandlerFeature>()?.Error is BadHttpRequestException rejected)
+                {
+                    await ApiProblems.WriteRequestRejectedAsync(context, rejected.StatusCode, context.RequestAborted);
+                    return;
+                }
+
                 await ApiProblems.WriteServerErrorAsync(context, context.RequestAborted);
             },
         });

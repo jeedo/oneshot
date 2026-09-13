@@ -113,8 +113,9 @@ Each table lists the threats that apply to the component, the register ID, and w
 |--------|--------|----|-------------------|
 | Tampering | Headers forged to bypass rate limiting | T11 | Forwarded headers honoured only from configured known proxies (20, 30) |
 | Tampering | Razor page routes carry no method constraint, so `TRACE` renders the whole page and `OPTIONS` answers a bare 200 | T4 | Page endpoints constrained to `GET`/`HEAD`, so routing answers 405 with `Allow` like the API behind them (32) |
-| Info disclosure | Stack traces, framework versions, `Server` header, distinguishable error bodies | T13 | `AddServerHeader = false` (5); generic RFC 7807 errors, no developer exception page in any environment (24, 41) |
+| Info disclosure | Stack traces, framework versions, `Server` header, distinguishable error bodies | T13 | `AddServerHeader = false` (5); generic RFC 7807 errors, no developer exception page in any environment (24, 41); a protocol rejection reports only its status, never Kestrel's message naming the limit (38) |
 | Denial of service | Body, header, and connection exhaustion | T6 | `MaxRequestBodySize` 128 KiB, header size/count caps, keep-alive and header timeouts (5) |
+| Denial of service | Rejected requests logged as faults, so the body limit becomes a log-flooding lever | T6 | Kestrel's `BadHttpRequestException` keeps its own 4xx status and is excluded from error diagnostics (38) |
 | Elevation | Misconfiguration enables HTTP, dev pages, or untrusted proxies | T15 | `ValidateOnStart` refuses to start outside Development when no HTTPS address and no trusted proxy are configured, when `DetailedErrors` is on, when the HSTS max-age, body/header limits, capacity caps or rate limits are absent or unusable, or when forwarded headers are configured without known proxies (49); deployment docs (50) |
 
 ### C5. API endpoints (`POST /api/secrets`, `GET /api/secrets/{id}`, `POST …/reveal`)

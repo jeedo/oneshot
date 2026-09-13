@@ -63,7 +63,10 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.MapSecretsApi();
 app.MapWhoAmI();
-app.MapRazorPages();
+// The pages are static markup with no handlers, so Razor Pages narrows nothing: left alone, every method
+// matches — TRACE renders the whole reveal page and OPTIONS answers a bare 200. Constraining the endpoints
+// makes routing answer 405 with Allow, the same as the API behind them. (T4)
+app.MapRazorPages().WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMethods.Head]));
 app.MapOperationalEndpoints();
 
 app.Run();

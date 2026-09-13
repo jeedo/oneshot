@@ -82,7 +82,7 @@ one branch, written tests-first (red → green).
 - [x] 41. (T13) Information disclosure: an exception thrown inside a handler yields a generic problem-details body with no stack, type, or message; `/api/secrets/{unknown}`, `/api/secrets/{malformed}`, and `/nonexistent` differ only as documented; responses expose no framework version.
 - [x] 42. (T8) Fragment and transport (Playwright): after the reveal page loads, `location.hash` is empty and the history entry lacks the key; a plain-HTTP request is redirected before any API call; no request from the page carries a `Referer` beyond the origin.
 - [x] 43. (T14) Supply chain: `dotnet list package --vulnerable --include-transitive` and `npm audit --audit-level=high` are clean; `package.json` has an empty `dependencies` map; `packages.lock.json` and `package-lock.json` are committed and enforced with locked restores.
-- [ ] 44. End-to-end (Playwright): create → copy link → open in a fresh browser context → whoami → Reveal → plaintext shown; reopen → "already revealed"; open after expiry → Unknown; open with a truncated fragment → error with the secret still Available; keyboard-only operation and accessible labels on both pages.
+- [x] 44. End-to-end (Playwright): create → copy link → open in a fresh browser context → whoami → Reveal → plaintext shown; reopen → "already revealed"; open after expiry → Unknown; open with a truncated fragment → error with the secret still Available; keyboard-only operation and accessible labels on both pages.
 
 ## Phase 5: CI/CD & Deployment
 

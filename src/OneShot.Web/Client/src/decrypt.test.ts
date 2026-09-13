@@ -10,9 +10,11 @@ async function sealed() {
   return { rawKey, nonce, ciphertext: await encrypt(plaintext, rawKey, nonce) };
 }
 
-function flip(bytes: Uint8Array<ArrayBuffer>, index: number): Uint8Array<ArrayBuffer> {
+// Every bit, not just the lowest one of each byte: a check that only ever flips bit 0 would miss an
+// implementation that authenticated part of each byte.
+function flip(bytes: Uint8Array<ArrayBuffer>, index: number, bit = 0): Uint8Array<ArrayBuffer> {
   const copy = bytes.slice();
-  copy[index] = (copy[index] ?? 0) ^ 1;
+  copy[index] = (copy[index] ?? 0) ^ (1 << bit);
   return copy;
 }
 
@@ -29,20 +31,33 @@ describe('[T9] client decryption', () => {
     await expect(decrypt(ciphertext, generateKey(), nonce)).rejects.toBeInstanceOf(Error);
   });
 
-  it('fails closed for a single flipped bit anywhere in the ciphertext or its tag', async () => {
+  it('fails closed for every single-bit flip anywhere in the ciphertext or its tag', async () => {
     const { rawKey, nonce, ciphertext } = await sealed();
+    let attempts = 0;
 
     for (let i = 0; i < ciphertext.length; i++) {
-      await expect(decrypt(flip(ciphertext, i), rawKey, nonce)).rejects.toBeInstanceOf(Error);
+      for (let bit = 0; bit < 8; bit++) {
+        await expect(decrypt(flip(ciphertext, i, bit), rawKey, nonce)).rejects.toBeInstanceOf(Error);
+        attempts++;
+      }
     }
+
+    // The message is 28 bytes and the tag 16, so every bit of both was tried.
+    expect(attempts).toBe((28 + 16) * 8);
   });
 
-  it('fails closed for a single flipped bit in the nonce', async () => {
+  it('fails closed for every single-bit flip in the nonce', async () => {
     const { rawKey, nonce, ciphertext } = await sealed();
+    let attempts = 0;
 
     for (let i = 0; i < nonce.length; i++) {
-      await expect(decrypt(ciphertext, rawKey, flip(nonce, i))).rejects.toBeInstanceOf(Error);
+      for (let bit = 0; bit < 8; bit++) {
+        await expect(decrypt(ciphertext, rawKey, flip(nonce, i, bit))).rejects.toBeInstanceOf(Error);
+        attempts++;
+      }
     }
+
+    expect(attempts).toBe(12 * 8);
   });
 
   it('reports authentication failure as an OperationError, not a generic fault', async () => {

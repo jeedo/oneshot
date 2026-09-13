@@ -34,6 +34,24 @@ internal static class ApiProblems
         await context.Response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json", cancellationToken);
     }
 
+    // Kestrel rejects an oversized body, a malformed request line or bad chunking by throwing, and the
+    // exception carries the status it chose. Only that status is used: the message may describe the limit or
+    // quote the request, so it is never echoed (T13).
+    public static async Task WriteRequestRejectedAsync(HttpContext context, int statusCode, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var status = statusCode is >= 400 and < 500 ? statusCode : StatusCodes.Status400BadRequest;
+        context.Response.StatusCode = status;
+        var problem = new Microsoft.AspNetCore.Mvc.ProblemDetails
+        {
+            Status = status,
+            Title = "The request was rejected.",
+            Extensions = { ["code"] = status == StatusCodes.Status413PayloadTooLarge ? "payloadTooLarge" : "malformedRequest" },
+        };
+        await context.Response.WriteAsJsonAsync(problem, options: null, contentType: "application/problem+json", cancellationToken);
+    }
+
     public static async Task WriteServerErrorAsync(HttpContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);

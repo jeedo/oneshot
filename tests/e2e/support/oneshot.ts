@@ -1,5 +1,8 @@
 import { type Page, expect } from '@playwright/test';
 
+// The single first-party script, pinned by both the integrity attribute and the CSP script-src hash (T7).
+export const ClientBundlePath = '/js/oneshot.js';
+
 export interface ShareLink {
   link: string;
   id: string;

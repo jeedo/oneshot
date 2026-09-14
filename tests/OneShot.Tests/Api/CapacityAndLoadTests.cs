@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Diagnostics;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 
@@ -140,8 +141,10 @@ public sealed class CapacityAndLoadTests
     }
 
     // The plan asked for NBomber here. It is a scenario-and-report load framework, and what this needs is
-    // 20,000 round trips and a memory reading, so it would have been a large dependency for a stopwatch and a
-    // GC call. This drives the same load in process instead; the assertions are the ones that matter.
+    // 20,000 round trips, so it would have been a large dependency for a loop. This drives the same load in
+    // process instead. Retention is measured separately, below, rather than as a memory delta over this run:
+    // GC.GetTotalMemory reports the whole test process, so every other collection running in parallel lands
+    // in the reading, and the number swung from 3 MiB alone to 45 MiB inside the full suite.
     [Fact]
     public async Task TenThousandCreateAndRevealRoundTrips_LeaveNoCiphertextBehindAndDoNotGrowUnbounded()
     {
@@ -149,22 +152,12 @@ public sealed class CapacityAndLoadTests
         const int Concurrency = 32;
 
         using var factory = new OneShotFactory();
-        // A 4 MiB cap rather than the production 64 MiB: the run churns ~10 MiB of ciphertext through it, so
-        // the plan's "under 1.5x the byte cap" is a bound a leak would actually cross. At 64 MiB it would not.
-        const long LoadByteCap = 4L * 1024 * 1024;
-        using var app = Configured(factory, entries: int.MaxValue, bytes: LoadByteCap).WithFakeTime();
+        using var app = Configured(factory, entries: int.MaxValue, bytes: 64L * 1024 * 1024).WithFakeTime();
         using var client = app.CreateClient();
         var store = app.Service<InMemorySecretStore>();
         var sweeper = app.Services.GetServices<IHostedService>().OfType<ExpirySweeperService>().Single();
         await sweeper.Ready;
 
-        // Baseline after the app is warm, so framework startup allocations are not counted as growth.
-        using (var warmup = await Create(client))
-        {
-            Assert.Equal(HttpStatusCode.Created, warmup.StatusCode);
-        }
-
-        var baseline = GC.GetTotalMemory(forceFullCollection: true);
         var passesBefore = sweeper.Passes;
         var revealed = 0;
         var stopwatch = Stopwatch.StartNew();
@@ -196,7 +189,6 @@ public sealed class CapacityAndLoadTests
 
         app.Clock.Advance(TimeSpan.FromDays(8));
         await WaitFor(() => store.Count == 0);
-        var growth = GC.GetTotalMemory(forceFullCollection: true) - baseline;
 
         Assert.Equal(Rounds, revealed);
         // Every payload is released the moment it is consumed, so no ciphertext survives the run.
@@ -204,10 +196,66 @@ public sealed class CapacityAndLoadTests
         Assert.Equal(0, store.Count);
         // The sweeper kept running while the load was in flight, not only once it stopped.
         Assert.True(passesUnderLoad > 0, "the sweeper completed no pass while the load was in flight");
-        // Churn must not accumulate: roughly 10 MiB of ciphertext passed through a 4 MiB cap.
-        Assert.True(
-            growth < 1.5 * LoadByteCap,
-            $"managed memory grew by {growth / (1024.0 * 1024.0):F1} MiB across {Rounds} round trips, over the {1.5 * LoadByteCap / (1024 * 1024)} MiB bound");
+    }
+
+    [Fact]
+    public void AConsumedPayloadIsNotRetainedAnywhere_SoChurnCannotAccumulate()
+    {
+        // The property the memory delta was reaching for, stated directly: after a secret is consumed, the
+        // array it was carried in must be unreachable. A weak reference answers that exactly, and nothing
+        // another test allocates can change the answer.
+        using var factory = new OneShotFactory();
+        using var app = Configured(factory, entries: int.MaxValue, bytes: 64L * 1024 * 1024).WithFakeTime();
+        var store = app.Service<InMemorySecretStore>();
+
+        var seeded = Enumerable.Range(0, 200).Select(_ => Seed(store)).ToList();
+        foreach (var (id, _) in seeded)
+        {
+            Consume(store, id);
+        }
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        Assert.DoesNotContain(seeded, entry => entry.Payload.IsAlive);
+    }
+
+    [Fact]
+    public void TheRetentionCheckWouldNoticeSomethingHeldOnTo()
+    {
+        // Without this, a weak reference that was always dead — collected before the check for reasons of its
+        // own — would make the test above pass while proving nothing.
+        using var factory = new OneShotFactory();
+        using var app = Configured(factory, entries: int.MaxValue, bytes: 64L * 1024 * 1024).WithFakeTime();
+        var store = app.Service<InMemorySecretStore>();
+
+        var seeded = Enumerable.Range(0, 200).Select(_ => Seed(store)).ToList();
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        // Still held by the store, because nothing has consumed them yet.
+        Assert.All(seeded, entry => Assert.True(entry.Payload.IsAlive));
+    }
+
+    // Both of these are separate methods so no local in the test's own frame keeps a buffer alive: in a debug
+    // build a local stays rooted until its method returns, which would make the test measure itself.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void Consume(InMemorySecretStore store, string id)
+    {
+        var consumed = store.TryConsume(id);
+        Assert.Equal(ConsumeOutcome.Consumed, consumed.Outcome);
+        consumed.Secret!.Dispose();
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (string Id, WeakReference Payload) Seed(InMemorySecretStore store)
+    {
+        var ciphertext = new byte[CiphertextBytes];
+        var id = Assert.IsType<Created>(store.Create(ciphertext, new byte[12], TimeSpan.FromHours(1))).Id;
+        return (id, new WeakReference(ciphertext));
     }
 
     private static async Task WaitFor(Func<bool> condition)

@@ -71,6 +71,10 @@ dotnet test OneShot.sln --collect:"XPlat Code Coverage" \
 python3 scripts/check_coverage.py                    # per-area table; fails below the gate
 ```
 
+CI measures coverage in `Release`, where the compiler emits fewer lines than `Debug`, so the percentages there
+differ from a local run — usually higher, occasionally tighter. Check a borderline area against a Release run
+(`--configuration Release`) before assuming a local number is what CI will see.
+
 The gate is 90 % lines and 85 % branches for `OneShot.Web.{Api,Audit,Secrets,Security}` — the domain,
 endpoint, security and audit code where a silent regression would matter. `OneShot.Web.Pages` and the startup
 file are reported but not gated: they are covered by the browser suite, where line counts over generated

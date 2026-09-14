@@ -18,12 +18,12 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:2fa828c68761b1b8c23d7662dc13
 # security.yml fetches gitleaks by checksum instead of trusting a moving action or tag.
 ARG NODE_MAJOR=22
 ARG NODE_PACKAGE_VERSION=22.23.2-1nodesource1
-ARG NODESOURCE_KEY_SHA256=b42e0321dabdc24e892115da705cf061167eac12a317f23d329862d0aa0a271d
+ARG NODESOURCE_ASC_SHA256=b42e0321dabdc24e892115da705cf061167eac12a317f23d329862d0aa0a271d
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.asc \
-    && printf '%s  /tmp/nodesource.asc\n' "${NODESOURCE_KEY_SHA256}" > /tmp/nodesource.sha256 \
+    && printf '%s  /tmp/nodesource.asc\n' "${NODESOURCE_ASC_SHA256}" > /tmp/nodesource.sha256 \
     && sha256sum --check --strict /tmp/nodesource.sha256 \
     && mkdir -p /etc/apt/keyrings \
     && gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg /tmp/nodesource.asc \

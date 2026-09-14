@@ -292,7 +292,7 @@ public sealed class SupplyChainTests
         // rather than trusted on receipt.
         var containerfile = File.ReadAllText(Path.Join(RepoPaths.Root, "Containerfile"));
 
-        Assert.Contains("NODESOURCE_KEY_SHA256=", containerfile, StringComparison.Ordinal);
+        Assert.Contains("NODESOURCE_ASC_SHA256=", containerfile, StringComparison.Ordinal);
         Assert.Contains("sha256sum --check --strict", containerfile, StringComparison.Ordinal);
     }
 

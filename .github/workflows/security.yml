@@ -114,7 +114,7 @@ jobs:
 
       # --redact so a hit never prints the secret into a public build log, which would leak it again.
       - name: Scan every commit
-        run: ./gitleaks git --no-banner --redact --exit-code 1 .
+        run: ./gitleaks git --no-banner --redact --exit-code 1 --config .gitleaks.toml .
 
   zap:
     name: ZAP baseline

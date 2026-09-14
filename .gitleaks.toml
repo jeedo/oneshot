@@ -1,0 +1,21 @@
+title = "OneShot gitleaks config (plan task 46, T14)"
+
+# This file is a review record, not a way to quieten the scanner: every allowlist entry below names why the
+# match is not a secret. Anything not listed here is still reported, and security.yml fails the build on any
+# leak gitleaks finds (`gitleaks git --no-banner --redact --exit-code 1 .`).
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = '''
+generic-api-key false positive: a SHA-256 checksum of NodeSource's public GPG signing key
+(Containerfile), assigned to an ARG whose old name contained "KEY" — the shape gitleaks' generic-api-key
+rule looks for, even though the value is a public digest of a public file, not a secret. The ARG was renamed
+(NODESOURCE_ASC_SHA256) to stop tripping this going forward, but the string is already in this repository's
+history (commit aa04f4f), which security.yml scans in full, so the entry stays here rather than being solved
+by rewriting shared history.
+'''
+regexes = [
+  '''b42e0321dabdc24e892115da705cf061167eac12a317f23d329862d0aa0a271d''',
+]

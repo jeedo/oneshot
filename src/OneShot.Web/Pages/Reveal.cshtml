@@ -10,10 +10,12 @@
     </p>
     <div id="result" hidden>
         <p>
-            <label for="plaintext">Secret</label>
+            @* A <label for> does not attach to a <pre>: only form controls are labelable, so the label was
+               inert and the revealed secret reached a screen reader unnamed. aria-labelledby does attach. *@
+            <span id="plaintext-label">Secret</span>
             <button type="button" id="copy">Copy</button>
         </p>
-        <pre id="plaintext" tabindex="0"></pre>
+        <pre id="plaintext" tabindex="0" aria-labelledby="plaintext-label"></pre>
         <p>This secret has now been destroyed on the server. Copy it before you close this page.</p>
     </div>
     <p id="warning">Revealing destroys the secret on the server.</p>

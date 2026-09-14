@@ -234,9 +234,8 @@ public sealed class SupplyChainTests
         var unpinned = new List<string>();
         var fromLines = 0;
 
-        foreach (var line in File.ReadLines(containerfile))
+        foreach (var trimmed in File.ReadLines(containerfile).Select(line => line.Trim()))
         {
-            var trimmed = line.Trim();
             if (!trimmed.StartsWith("FROM ", StringComparison.Ordinal))
             {
                 continue;

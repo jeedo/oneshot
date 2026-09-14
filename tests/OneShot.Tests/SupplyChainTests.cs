@@ -183,6 +183,47 @@ public sealed class SupplyChainTests
         Assert.Equal(1, entries);
     }
 
+    [Fact]
+    public void DependabotUpdatesEveryEcosystemThisRepoShips()
+    {
+        // Each pair is checked as an adjacent two-line block so an ecosystem entry cannot satisfy the
+        // assertion by borrowing some other entry's directory.
+        var config = File.ReadAllText(Path.Join(RepoPaths.Root, ".github", "dependabot.yml"));
+
+        Assert.Contains("version: 2", config, StringComparison.Ordinal);
+        foreach (var (ecosystem, directory) in new[]
+        {
+            ("nuget", "/"),
+            ("npm", "/src/OneShot.Web/Client"),
+            ("npm", "/tests/e2e"),
+            ("github-actions", "/"),
+            ("docker", "/"),
+        })
+        {
+            Assert.Contains(
+                $"package-ecosystem: \"{ecosystem}\"\n    directory: \"{directory}\"",
+                config,
+                StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void EveryDependabotEntryRunsWeeklyAndGroupsOnlyMinorAndPatch()
+    {
+        // Grouping minor/patch keeps a batch of routine bumps to one PR; leaving "major" out of every group
+        // means a breaking bump never rides along in that PR and still gets its own for manual review.
+        var config = File.ReadAllText(Path.Join(RepoPaths.Root, ".github", "dependabot.yml"));
+        var entries = config.Split("- package-ecosystem:").Skip(1).ToList();
+
+        Assert.Equal(5, entries.Count);
+        foreach (var entry in entries)
+        {
+            Assert.Contains("interval: \"weekly\"", entry, StringComparison.Ordinal);
+            Assert.Contains("update-types: [\"minor\", \"patch\"]", entry, StringComparison.Ordinal);
+            Assert.DoesNotContain("major", entry, StringComparison.Ordinal);
+        }
+    }
+
     private static HashSet<string> LockedPackages(string project)
     {
         using var lockFile = JsonDocument.Parse(File.ReadAllText(Path.Join(RepoPaths.Root, project, "packages.lock.json")));

@@ -8,6 +8,11 @@ using OneShot.Web.Audit;
 using OneShot.Web.Secrets;
 using OneShot.Web.Security;
 
+if (args is ["--healthcheck"])
+{
+    return await HealthCheckProbe.RunAsync();
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel(KestrelHardening.Apply);
@@ -70,5 +75,6 @@ app.MapRazorPages().WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMe
 app.MapOperationalEndpoints();
 
 app.Run();
+return 0;
 
 public partial class Program;

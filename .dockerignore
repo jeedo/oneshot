@@ -1,0 +1,15 @@
+# Keep the build context to what the image actually needs (plan task 48): the client build and .NET publish
+# of src/OneShot.Web. Everything else — tests, docs, scripts, CI, other people's local build output — only
+# slows the build and, for bin/obj/node_modules, could otherwise leak a stale artifact into the image.
+**/bin/
+**/obj/
+**/node_modules/
+.git/
+.github/
+artifacts/
+docs/
+scripts/
+tests/
+*.md
+Dockerfile
+.dockerignore

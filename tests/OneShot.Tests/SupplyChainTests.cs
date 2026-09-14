@@ -224,6 +224,65 @@ public sealed class SupplyChainTests
         }
     }
 
+    [Fact]
+    public void EveryDockerBaseImageIsPinnedToADigest()
+    {
+        // Same reasoning as the workflow actions: a tag is a mutable pointer an upstream publisher (or a
+        // compromised registry) can repoint, a digest is not. Dependabot's docker ecosystem entry keeps these
+        // current without giving up immutability in between.
+        var dockerfile = Path.Join(RepoPaths.Root, "Dockerfile");
+        var unpinned = new List<string>();
+        var fromLines = 0;
+
+        foreach (var line in File.ReadLines(dockerfile))
+        {
+            var trimmed = line.Trim();
+            if (!trimmed.StartsWith("FROM ", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            fromLines++;
+            var reference = trimmed["FROM ".Length..].Split(" AS ", StringSplitOptions.None)[0].Trim();
+            if (!reference.Contains("@sha256:", StringComparison.Ordinal))
+            {
+                unpinned.Add(reference);
+            }
+        }
+
+        Assert.True(fromLines >= 3, "Expected a Node stage, a build stage and a final runtime stage.");
+        Assert.Empty(unpinned);
+    }
+
+    [Fact]
+    public void TheImageRunsAsANonRootUserWithNoVolumesAndAHealthcheck()
+    {
+        var lines = File.ReadAllLines(Path.Join(RepoPaths.Root, "Dockerfile"));
+        var dockerfile = string.Join('\n', lines);
+
+        // Non-root, and not by accident of whatever the base image currently defaults to (T5).
+        Assert.Contains("USER $APP_UID", dockerfile, StringComparison.Ordinal);
+        // A volume is a way for the app to persist something across container restarts; nothing here should
+        // survive one (T5) — the in-memory secret store already depends on that being true. Checked as an
+        // instruction (line start), not a substring, so mentioning "VOLUME" in prose doesn't trip this up.
+        Assert.DoesNotContain(lines, line => line.TrimStart().StartsWith("VOLUME", StringComparison.Ordinal));
+        // Exec form only: the final stage has no shell to interpret a string-form CMD/ENTRYPOINT/HEALTHCHECK.
+        Assert.Contains("HEALTHCHECK", dockerfile, StringComparison.Ordinal);
+        Assert.Contains("--healthcheck", dockerfile, StringComparison.Ordinal);
+        Assert.Contains("ENTRYPOINT [\"dotnet\"", dockerfile, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheDockerBuildContextExcludesWhatTheImageNeverNeeds()
+    {
+        var ignore = File.ReadAllText(Path.Join(RepoPaths.Root, ".dockerignore"));
+
+        foreach (var excluded in new[] { "bin/", "obj/", "node_modules/", ".git" })
+        {
+            Assert.Contains(excluded, ignore, StringComparison.Ordinal);
+        }
+    }
+
     private static HashSet<string> LockedPackages(string project)
     {
         using var lockFile = JsonDocument.Parse(File.ReadAllText(Path.Join(RepoPaths.Root, project, "packages.lock.json")));

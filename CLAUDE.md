@@ -57,6 +57,7 @@ dotnet test OneShot.sln                              # xUnit unit + integration 
 dotnet format OneShot.sln --verify-no-changes        # LF endings, using-directive groups, style rules
 python3 scripts/check_docs.py                        # docs structure and task numbering
 python3 scripts/check_threat_coverage.py             # every threat in the model has a citing test
+python3 scripts/check_supply_chain.py                # vulnerable packages, unpinned versions, missing lock files
 npm --prefix src/OneShot.Web/Client run check        # tsc --noEmit, vitest, esbuild bundle
 ```
 
@@ -94,6 +95,10 @@ first. Chromium is pre-installed at `PLAYWRIGHT_BROWSERS_PATH`; never run `playw
 - In Claude Code on the web the egress proxy blocks `builds.dotnet.microsoft.com`, so the dotnet-install script
   fails. Install from the Ubuntu archive instead: `apt-get update && apt-get install -y dotnet-sdk-10.0`.
   NuGet (`api.nuget.org`) is reachable.
+- NuGet restores write `packages.lock.json` per project, and both are committed. On CI (`ContinuousIntegrationBuild=true`)
+  restore runs in locked mode, so a lock file that no longer matches its project is an error rather than something
+  restore rewrites. After changing a `PackageReference`, run `dotnet restore --force-evaluate` and commit the
+  updated lock file.
 - Node.js 22.12+ is required: `dotnet build` runs `npm ci --ignore-scripts` and the esbuild bundle for
   `src/OneShot.Web/Client` before compiling, producing the git-ignored `wwwroot/js/oneshot.js`. The client has
   zero runtime dependencies (`dependencies` in `package.json` stays `{}`); devDependencies are pinned exactly and
@@ -142,5 +147,6 @@ Run from the project root:
 | `get_phase_tasks.py` | `python3 scripts/get_phase_tasks.py <phase>` | List tasks for a phase (by name or number) |
 | `check_threat_coverage.py` | `python3 scripts/check_threat_coverage.py` | Fail if a threat in `threat-model.md` has no `[Trait("Threat", "T#")]` or `describe('[T#] …')` test |
 | `check_coverage.py` | `python3 scripts/check_coverage.py [dir]` | Report per-area line and branch coverage from a cobertura run and fail below the gate |
+| `check_supply_chain.py` | `python3 scripts/check_supply_chain.py` | Run both vulnerability scanners and fail on an unpinned version or a missing lock file (needs network) |
 
 The scripts' own tests run with `python3 -m unittest discover -s scripts -p 'test_*.py'`.

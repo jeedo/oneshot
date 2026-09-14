@@ -1,0 +1,176 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # The dependency and secret scans look at a moving target — an advisory published today makes yesterday's
+  # clean run wrong — so they also run on a schedule rather than only when someone pushes.
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  ContinuousIntegrationBuild: true
+
+# Actions are pinned to commits rather than tags for the reasons given in ci.yml, and
+# SupplyChainTests.EveryWorkflowActionIsPinnedToACommit_NotATag fails the build if one is not.
+jobs:
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The only write this repository's workflows do, and only so findings reach the Security tab.
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: csharp
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: matrix.language == 'csharp'
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: matrix.language == 'csharp'
+        with:
+          node-version: 22
+
+      - uses: github/codeql-action/init@4bd7200e1f146b1c937cae12d258b50f41a53cf8 # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # security-and-quality is the widest query set; this repository treats analyzer findings as errors
+          # already, so the extra quality queries are not noise it cannot afford.
+          queries: security-and-quality
+
+      # Built by hand rather than by autobuild: the build runs npm ci and esbuild for the client first, and a
+      # guessed build command that skipped that would analyse an assembly missing its embedded bundle hash.
+      - name: Build
+        if: matrix.language == 'csharp'
+        run: dotnet build OneShot.sln --configuration Release
+
+      - uses: github/codeql-action/analyze@4bd7200e1f146b1c937cae12d258b50f41a53cf8 # v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  dependencies:
+    name: Dependency advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - name: Restore (locked)
+        run: dotnet restore OneShot.sln --locked-mode
+
+      # dotnet list package --vulnerable --include-transitive, npm audit for both node projects, and the
+      # checks that versions are pinned and every project carries a lock file. npm audit reads the lock file,
+      # so nothing needs installing first.
+      - name: Advisories, pins and lock files
+        run: python3 scripts/check_supply_chain.py
+
+  secrets:
+    name: Secret scanning (gitleaks)
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      # Published alongside the release. Pinning the archive by hash rather than using the gitleaks action:
+      # the action would need a token and repository access, and a version tag can be moved (T14).
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The whole history: a secret committed and later removed is still in it, and still leaked.
+          fetch-depth: 0
+
+      - name: Fetch gitleaks
+        run: |
+          set -euo pipefail
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "$archive" gitleaks
+
+      # --redact so a hit never prints the secret into a public build log, which would leak it again.
+      - name: Scan every commit
+        run: ./gitleaks git --no-banner --redact --exit-code 1 .
+
+  zap:
+    name: ZAP baseline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - name: Build
+        run: dotnet build OneShot.sln --configuration Release
+
+      # Production, because that is the configuration being shipped and the one the startup validation of task
+      # 49 governs. Loopback is declared a known proxy to stand in for TLS terminating upstream, which is what
+      # lets a plain-HTTP listener pass that validation — the same arrangement the browser suite uses.
+      - name: Start the app
+        env:
+          ASPNETCORE_ENVIRONMENT: Production
+          ForwardedHeaders__KnownProxies__0: 127.0.0.1
+        run: |
+          set -euo pipefail
+          nohup dotnet run --project src/OneShot.Web --configuration Release --no-build \
+            --urls http://127.0.0.1:5199 > app.log 2>&1 &
+          for _ in $(seq 1 60); do
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5199/healthz)" = "200" ]; then
+              echo "app is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "the app never became healthy"; cat app.log; exit 1
+
+      # fail_action is off because zap-baseline.py fails on any warning and cannot express a severity
+      # threshold. The report is graded by scripts/check_zap_report.py in the next step, which fails on Medium
+      # or higher; .github/zap-rules.tsv is the separate, reviewed list of rules ZAP should not raise at all.
+      - uses: zaproxy/action-baseline@6c5a007541891231cd9e0ddec25d4f25c59c9874 # v0.15.0
+        with:
+          target: http://127.0.0.1:5199
+          rules_file_name: .github/zap-rules.tsv
+          fail_action: false
+          allow_issue_writing: false
+          cmd_options: -a -j
+
+      - name: Nothing at Medium or above
+        run: python3 scripts/check_zap_report.py report_json.json
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: zap-report
+          path: |
+            report_json.json
+            report_html.html
+            app.log
+          retention-days: 7
+          if-no-files-found: warn

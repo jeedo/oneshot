@@ -18,17 +18,20 @@ public sealed class SupplyChainTests
         "System.DirectoryServices.Protocols",
     ];
 
+    // Path.Join throughout rather than Path.Combine: Combine silently discards everything before a segment
+    // that turns out to be rooted, so a path built from a member-data argument can end up pointing outside the
+    // repository. Join only concatenates, which is all these need.
     public static TheoryData<string> Projects => new()
     {
-        Path.Combine("src", "OneShot.Web"),
-        Path.Combine("tests", "OneShot.Tests"),
+        Path.Join("src", "OneShot.Web"),
+        Path.Join("tests", "OneShot.Tests"),
     };
 
     [Theory]
     [MemberData(nameof(Projects))]
     public void EveryProjectRecordsItsResolvedGraph_WithAHashForEveryPackage(string project)
     {
-        var path = Path.Combine(RepoPaths.Root, project, "packages.lock.json");
+        var path = Path.Join(RepoPaths.Root, project, "packages.lock.json");
 
         Assert.True(File.Exists(path), $"{project} has no packages.lock.json; run dotnet restore");
         using var lockFile = JsonDocument.Parse(File.ReadAllText(path));
@@ -57,7 +60,7 @@ public sealed class SupplyChainTests
     [Fact]
     public void TheWebProjectCarriesOnlyTheRuntimePackagesWeExpect()
     {
-        var packages = LockedPackages(Path.Combine("src", "OneShot.Web"));
+        var packages = LockedPackages(Path.Join("src", "OneShot.Web"));
 
         // Direct and transitive together: something arriving through another package still ships.
         Assert.Equal(AllowedRuntimePackages, packages.Order(StringComparer.Ordinal).ToArray());
@@ -67,8 +70,8 @@ public sealed class SupplyChainTests
     public void TheTestProjectsPackagesNeverReachTheWebProject()
     {
         // FsCheck, xunit and the coverage collector are large surfaces that must stay out of the deployed app.
-        var web = LockedPackages(Path.Combine("src", "OneShot.Web"));
-        var tests = LockedPackages(Path.Combine("tests", "OneShot.Tests"));
+        var web = LockedPackages(Path.Join("src", "OneShot.Web"));
+        var tests = LockedPackages(Path.Join("tests", "OneShot.Tests"));
 
         Assert.Contains("FsCheck", tests);
         Assert.DoesNotContain(web, package => tests.Contains(package) && !AllowedRuntimePackages.Contains(package));
@@ -77,7 +80,7 @@ public sealed class SupplyChainTests
     [Fact]
     public void ARestoreCannotQuietlyChangeTheGraph()
     {
-        var props = File.ReadAllText(Path.Combine(RepoPaths.Root, "Directory.Build.props"));
+        var props = File.ReadAllText(Path.Join(RepoPaths.Root, "Directory.Build.props"));
 
         Assert.Contains("<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>", props, StringComparison.Ordinal);
         // Locked mode on CI is what makes it a lock rather than a cache: without it a restore just rewrites
@@ -88,7 +91,7 @@ public sealed class SupplyChainTests
     [Fact]
     public void TheClientShipsNoRuntimeDependencies()
     {
-        var path = Path.Combine(RepoPaths.Root, "src", "OneShot.Web", "Client", "package.json");
+        var path = Path.Join(RepoPaths.Root, "src", "OneShot.Web", "Client", "package.json");
         using var package = JsonDocument.Parse(File.ReadAllText(path));
 
         Assert.Empty(package.RootElement.GetProperty("dependencies").EnumerateObject());
@@ -100,7 +103,7 @@ public sealed class SupplyChainTests
     {
         // A tag is mutable: whoever controls the action can move v7 to new code, and CI runs with a checkout
         // of this repository. A 40-character commit is the only reference that cannot be repointed.
-        var workflows = Directory.GetFiles(Path.Combine(RepoPaths.Root, ".github", "workflows"), "*.yml");
+        var workflows = Directory.GetFiles(Path.Join(RepoPaths.Root, ".github", "workflows"), "*.yml");
         var unpinned = new List<string>();
 
         Assert.NotEmpty(workflows);
@@ -130,7 +133,7 @@ public sealed class SupplyChainTests
     public void TheWorkflowRunsEveryGateThisRepositoryHas()
     {
         // A gate nobody runs is decoration. If a check is added to CLAUDE.md's local list it belongs here too.
-        var ci = File.ReadAllText(Path.Combine(RepoPaths.Root, ".github", "workflows", "ci.yml"));
+        var ci = File.ReadAllText(Path.Join(RepoPaths.Root, ".github", "workflows", "ci.yml"));
 
         foreach (var gate in new[]
         {
@@ -150,9 +153,39 @@ public sealed class SupplyChainTests
         }
     }
 
+    [Fact]
+    public void EveryZapSuppressionSaysWhyItIsThere()
+    {
+        // An allowlist without reasons is how a scanner stops meaning anything: the entries outlive whoever
+        // understood them. Each line has to carry a justification long enough to be one.
+        var rules = Path.Join(RepoPaths.Root, ".github", "zap-rules.tsv");
+        var bare = new List<string>();
+        var entries = 0;
+
+        foreach (var line in File.ReadLines(rules))
+        {
+            if (line.Length == 0 || line.StartsWith('#'))
+            {
+                continue;
+            }
+
+            entries++;
+            var fields = line.Split('\t');
+            if (fields.Length < 3 || fields[2].Trim().Length < 40)
+            {
+                bare.Add(line);
+            }
+        }
+
+        Assert.Empty(bare);
+        // A file of nothing but comments would pass the loop above while suppressing nothing, which is fine —
+        // but it would also pass if the file were emptied by accident, so the count is pinned.
+        Assert.Equal(1, entries);
+    }
+
     private static HashSet<string> LockedPackages(string project)
     {
-        using var lockFile = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoPaths.Root, project, "packages.lock.json")));
+        using var lockFile = JsonDocument.Parse(File.ReadAllText(Path.Join(RepoPaths.Root, project, "packages.lock.json")));
 
         return [.. lockFile.RootElement.GetProperty("dependencies")
             .EnumerateObject()

@@ -152,5 +152,6 @@ Run from the project root:
 | `check_threat_coverage.py` | `python3 scripts/check_threat_coverage.py` | Fail if a threat in `threat-model.md` has no `[Trait("Threat", "T#")]` or `describe('[T#] …')` test |
 | `check_coverage.py` | `python3 scripts/check_coverage.py [dir]` | Report per-area line and branch coverage from a cobertura run and fail below the gate |
 | `check_supply_chain.py` | `python3 scripts/check_supply_chain.py` | Run both vulnerability scanners and fail on an unpinned version or a missing lock file (needs network) |
+| `check_zap_report.py` | `python3 scripts/check_zap_report.py <report.json>` | Fail on a ZAP alert at Medium or above; `.github/zap-rules.tsv` is the reviewed suppression list |
 
 The scripts' own tests run with `python3 -m unittest discover -s scripts -p 'test_*.py'`.

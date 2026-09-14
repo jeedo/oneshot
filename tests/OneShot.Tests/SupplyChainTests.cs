@@ -150,6 +150,36 @@ public sealed class SupplyChainTests
         }
     }
 
+    [Fact]
+    public void EveryZapSuppressionSaysWhyItIsThere()
+    {
+        // An allowlist without reasons is how a scanner stops meaning anything: the entries outlive whoever
+        // understood them. Each line has to carry a justification long enough to be one.
+        var rules = Path.Combine(RepoPaths.Root, ".github", "zap-rules.tsv");
+        var bare = new List<string>();
+        var entries = 0;
+
+        foreach (var line in File.ReadLines(rules))
+        {
+            if (line.Length == 0 || line.StartsWith('#'))
+            {
+                continue;
+            }
+
+            entries++;
+            var fields = line.Split('\t');
+            if (fields.Length < 3 || fields[2].Trim().Length < 40)
+            {
+                bare.Add(line);
+            }
+        }
+
+        Assert.Empty(bare);
+        // A file of nothing but comments would pass the loop above while suppressing nothing, which is fine —
+        // but it would also pass if the file were emptied by accident, so the count is pinned.
+        Assert.Equal(1, entries);
+    }
+
     private static HashSet<string> LockedPackages(string project)
     {
         using var lockFile = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoPaths.Root, project, "packages.lock.json")));

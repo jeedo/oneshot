@@ -1,0 +1,13 @@
+# OWASP ZAP baseline rule configuration (plan task 46, T14).
+#
+# Format, tab separated:  <rule id>	<WARN|IGNORE|FAIL>	<comment>
+#
+# This file is a review record, not a way to quieten the scanner. Every IGNORE below names why the finding is
+# a deliberate decision and which test holds that decision in place; anything not listed is reported, and
+# scripts/check_zap_report.py fails the build on Medium or higher.
+#
+# Reviewed against ZAP 2.17.0 on 2026-09-14, run against the app in Production over 15 URLs — the create page,
+# a seeded reveal page, the peek and whoami endpoints, the bundle, /healthz and a 404. The whole surface
+# produced exactly one alert, the informational one below: no Low, no Medium, no High.
+
+10109	IGNORE	Modern Web Application: ZAP noting the page is script-driven, which is the design (client-side AES-GCM, T1). Not a finding. The one script it sees is the first-party bundle, pinned by SRI and the CSP script-src hash and checked by BundleIntegrityTests and headers.spec.ts.

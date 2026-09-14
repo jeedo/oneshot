@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: nothing here writes to the repository, so nothing here may.
+permissions:
+  contents: read
+
+# A superseded run on the same branch tells nobody anything, and the E2E job is the slow one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  # Turns on RestoreLockedMode (see Directory.Build.props): a lock file that no longer matches its project
+  # fails the build here rather than being rewritten, which is what makes it a lock rather than a cache (T14).
+  ContinuousIntegrationBuild: true
+
+# Every action is pinned to a commit rather than a tag: a tag can be moved, and CI runs with a checkout of the
+# repository and the ability to influence what ships. Dependabot keeps the github-actions ecosystem current
+# (plan task 47), so the pins do not go stale silently.
+jobs:
+  build-and-test:
+    name: Build, format and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/OneShot.Web/Client/package-lock.json
+
+      - name: Restore (locked)
+        run: dotnet restore OneShot.sln --locked-mode
+
+      # Warnings are errors and the CA2100/CA3xxx/CA5xxx security rules are errors, so this step is the
+      # analyzer gate as much as the compile.
+      - name: Build
+        run: dotnet build OneShot.sln --no-restore --configuration Release
+
+      - name: Format
+        run: dotnet format OneShot.sln --no-restore --verify-no-changes
+
+      - name: Test with coverage
+        run: >
+          dotnet test OneShot.sln --no-build --configuration Release
+          --collect:"XPlat Code Coverage" --settings coverlet.runsettings
+          --results-directory artifacts/coverage
+
+      # Gates the domain, endpoint, security and audit namespaces at 90 % lines and 85 % branches.
+      - name: Coverage gate
+        run: python3 scripts/check_coverage.py
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: coverage
+          path: artifacts/coverage/**/coverage.cobertura.xml
+          retention-days: 7
+
+  client:
+    name: Client (tsc, vitest, bundle)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/OneShot.Web/Client/package-lock.json
+
+      # ci, not install: it installs exactly what package-lock.json records and fails if the two disagree.
+      # --ignore-scripts because nothing in this dependency set has a legitimate install hook (T14).
+      - name: Install
+        run: npm --prefix src/OneShot.Web/Client ci --ignore-scripts
+
+      - name: Typecheck, test and bundle
+        run: npm --prefix src/OneShot.Web/Client run check
+
+      # The recorded hash feeds the layout's integrity attribute and the CSP script-src hash (T7), so it has
+      # to match the bundle that was just built. Comparing the two directly rather than looking for a dirty
+      # working tree: npm run check never writes the recorded file, so a git diff on it is always clean and
+      # would prove nothing.
+      - name: Recorded bundle hash matches the built bundle
+        run: |
+          recorded="$(cat src/OneShot.Web/Client/bundle.sha256)"
+          built="$(openssl dgst -binary -sha256 src/OneShot.Web/wwwroot/js/oneshot.js | base64)"
+          echo "recorded=$recorded built=$built"
+          test "$recorded" = "$built"
+
+  e2e:
+    name: End to end (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/e2e/package-lock.json
+
+      - name: Install
+        run: npm --prefix tests/e2e ci --ignore-scripts
+
+      # The dev container ships a pre-installed Chromium and CLAUDE.md says never to install one there. A
+      # runner has none, so it is installed here, at the version @playwright/test is pinned to.
+      - name: Install Chromium
+        working-directory: tests/e2e
+        run: npx playwright install --with-deps chromium
+
+      # playwright.config.ts starts the app itself and waits for /healthz, so nothing needs starting here.
+      - name: Run
+        run: npm --prefix tests/e2e run check
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            tests/e2e/playwright-report
+            tests/e2e/test-results
+          retention-days: 7
+
+  docs-and-scripts:
+    name: Docs, threat coverage and scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Documentation structure
+        run: python3 scripts/check_docs.py
+
+      # Fails if a threat in the model has no test citing it, so a mitigation cannot lose its test quietly.
+      - name: Threat coverage
+        run: python3 scripts/check_threat_coverage.py
+
+      - name: Script tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' --verbose

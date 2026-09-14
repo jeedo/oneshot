@@ -31,6 +31,50 @@ public sealed class AuditLoggerTests : IClassFixture<OneShotFactory>
     }
 
     [Fact]
+    public void Event_IsReadableAsAList_BecauseThatIsHowAStructuredProviderReadsIt()
+    {
+        // The JSON console formatter reads the state by Count and index rather than by enumerating it, so
+        // these members are production paths even though the in-memory sink happens to enumerate. A broken
+        // indexer here would corrupt every audit line while every other test still passed.
+        var captured = new List<object?>();
+        var logger = LoggerFactory.Create(builder => builder.AddProvider(new CapturingStateProvider(captured))).CreateLogger<AuditLogger>();
+        new AuditLogger(logger, new FakeTimeProvider(Now)).Log(AuditAction.Create, Id, null);
+
+        var state = Assert.IsAssignableFrom<IReadOnlyList<KeyValuePair<string, object?>>>(Assert.Single(captured));
+
+        Assert.Equal(4, state.Count);
+        Assert.Equal("timestampUtc", state[0].Key);
+        Assert.Equal("action", state[1].Key);
+        Assert.Equal("secretId", state[2].Key);
+        Assert.Equal("windowsUser", state[3].Key);
+        // The non-generic enumerator is what a provider written against IEnumerable alone would reach for.
+        Assert.Equal(4, ((System.Collections.IEnumerable)state).Cast<KeyValuePair<string, object?>>().Count());
+        Assert.Equal(state.ToArray(), ((System.Collections.IEnumerable)state).Cast<KeyValuePair<string, object?>>().ToArray());
+    }
+
+    private sealed class CapturingStateProvider(List<object?> captured) : ILoggerProvider
+    {
+        public ILogger CreateLogger(string categoryName) => new StateLogger(captured);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class StateLogger(List<object?> captured) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                // The raw state, not a projection of it: the point is to exercise the type the provider sees.
+                captured.Add(state);
+            }
+        }
+    }
+
+    [Fact]
     public void Event_HasExactlyTheFourDocumentedFields()
     {
         _audit.Log(AuditAction.Create, Id, IdentityCookieUser("CORP\\alice"));

@@ -95,6 +95,61 @@ public sealed class SupplyChainTests
         Assert.NotEmpty(package.RootElement.GetProperty("devDependencies").EnumerateObject());
     }
 
+    [Fact]
+    public void EveryWorkflowActionIsPinnedToACommit_NotATag()
+    {
+        // A tag is mutable: whoever controls the action can move v7 to new code, and CI runs with a checkout
+        // of this repository. A 40-character commit is the only reference that cannot be repointed.
+        var workflows = Directory.GetFiles(Path.Combine(RepoPaths.Root, ".github", "workflows"), "*.yml");
+        var unpinned = new List<string>();
+
+        Assert.NotEmpty(workflows);
+        foreach (var workflow in workflows)
+        {
+            foreach (var line in File.ReadLines(workflow))
+            {
+                var trimmed = line.Trim();
+                if (!trimmed.StartsWith("- uses:", StringComparison.Ordinal) && !trimmed.StartsWith("uses:", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var reference = trimmed[(trimmed.IndexOf("uses:", StringComparison.Ordinal) + 5)..].Split('#')[0].Trim();
+                var version = reference.Contains('@', StringComparison.Ordinal) ? reference[(reference.IndexOf('@', StringComparison.Ordinal) + 1)..] : "";
+                if (version.Length != 40 || !version.All(character => char.IsAsciiHexDigitLower(character)))
+                {
+                    unpinned.Add($"{Path.GetFileName(workflow)}: {reference}");
+                }
+            }
+        }
+
+        Assert.Empty(unpinned);
+    }
+
+    [Fact]
+    public void TheWorkflowRunsEveryGateThisRepositoryHas()
+    {
+        // A gate nobody runs is decoration. If a check is added to CLAUDE.md's local list it belongs here too.
+        var ci = File.ReadAllText(Path.Combine(RepoPaths.Root, ".github", "workflows", "ci.yml"));
+
+        foreach (var gate in new[]
+        {
+            "dotnet restore OneShot.sln --locked-mode",
+            "dotnet build OneShot.sln",
+            "dotnet format OneShot.sln",
+            "dotnet test OneShot.sln",
+            "scripts/check_coverage.py",
+            "scripts/check_docs.py",
+            "scripts/check_threat_coverage.py",
+            "unittest discover -s scripts",
+            "src/OneShot.Web/Client run check",
+            "tests/e2e run check",
+        })
+        {
+            Assert.Contains(gate, ci, StringComparison.Ordinal);
+        }
+    }
+
     private static HashSet<string> LockedPackages(string project)
     {
         using var lockFile = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoPaths.Root, project, "packages.lock.json")));

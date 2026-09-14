@@ -1,0 +1,47 @@
+# Dependabot version updates (plan task 47, T14). Weekly per ecosystem, and each entry groups only minor and
+# patch bumps into one PR so routine updates arrive as a batch; "major" is deliberately absent from every
+# group, so a breaking bump always gets its own PR instead of riding along. CI (ci.yml) and the security jobs
+# (security.yml) already run on every pull request, so a Dependabot PR is gated the same as a human's; branch
+# protection requires those checks before merge and there is no auto-merge — a person still approves.
+version: 2
+updates:
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      nuget-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "npm"
+    directory: "/src/OneShot.Web/Client"
+    schedule:
+      interval: "weekly"
+    groups:
+      npm-client-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "npm"
+    directory: "/tests/e2e"
+    schedule:
+      interval: "weekly"
+    groups:
+      npm-e2e-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # No Dockerfile exists yet (plan task 48); this entry starts working the day one lands at the repo root.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      docker-minor-patch:
+        update-types: ["minor", "patch"]

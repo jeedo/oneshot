@@ -5,7 +5,7 @@ namespace OneShot.Web.Api;
 // its own probe: a plain GET against /healthz, translated into an exit code Docker understands.
 internal static class HealthCheckProbe
 {
-    // Must match the ASPNETCORE_URLS port set in the Dockerfile.
+    // Must match the ASPNETCORE_URLS port set in the Containerfile.
     public const int Port = 8080;
 
     public static async Task<int> RunAsync(HttpMessageHandler? handler = null)

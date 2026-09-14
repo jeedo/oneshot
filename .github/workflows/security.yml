@@ -182,7 +182,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Build the image
-        run: docker build -t oneshot:ci .
+        run: docker build -f Containerfile -t oneshot:ci .
+
+      # Caught locally once already: the Web SDK's default content globs will publish Client/package.json and
+      # friends (dev tooling manifests) into the image unless explicitly excluded, and PDBs ship in a Release
+      # publish unless told not to. Neither is a vulnerability Trivy would flag, but neither belongs in an
+      # image whose whole point is to have nothing in it beyond the running app.
+      - name: The shipped image carries nothing but the published app
+        run: |
+          set -euo pipefail
+          cid="$(docker create oneshot:ci)"
+          trap 'docker rm -f "$cid" >/dev/null' EXIT
+          if docker export "$cid" | tar -tf - | grep -E '^app/(Client/|.*\.pdb$)'; then
+            echo "unexpected file(s) in the shipped image (listed above)"; exit 1
+          fi
 
       # The same shape the image is meant to run in: read-only root filesystem, no named volumes, only a
       # memory-backed tmpfs for whatever transient scratch space the runtime wants. Nothing in this app writes

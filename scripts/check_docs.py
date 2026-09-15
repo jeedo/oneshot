@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Check docs/architecture.md and docs/plan.md for common issues.
+"""Check docs/architecture.md, docs/deployment.md and docs/plan.md for common issues.
 
 Checks:
   architecture.md — required sections present and non-empty, no TBD markers
+  deployment.md   — required sections present and non-empty, no TBD markers
   plan.md         — tasks sequentially numbered, no TBD markers
 """
 
@@ -15,6 +16,14 @@ REQUIRED_ARCH_SECTIONS = [
     "Tech Stack",
     "System Components",
     "Data Model",
+]
+
+REQUIRED_DEPLOYMENT_SECTIONS = [
+    "Linux and Container Deployment",
+    "Windows Deployment",
+    "TLS Certificates",
+    "Memory Limits",
+    "No Persistence Layer",
 ]
 
 TASK_RE = re.compile(r"^\s*- \[[ x]\] (\d+)\. ")
@@ -36,23 +45,33 @@ def _section_has_content(lines: list[str], section: str) -> bool:
     return False
 
 
-def check_architecture(path: Path) -> list[str]:
+def check_sectioned_lines(lines: list[str], label: str, required: list[str]) -> list[str]:
+    """Every `## <name>` in `required` exists and has content; no TBD markers anywhere."""
     errors: list[str] = []
-    if not path.exists():
-        return [f"{path}: file not found"]
-    lines = path.read_text().splitlines()
 
-    for section in REQUIRED_ARCH_SECTIONS:
+    for section in required:
         if not any(line.startswith("## ") and section in line for line in lines):
-            errors.append(f"architecture.md: missing required section '{section}'")
+            errors.append(f"{label}: missing required section '{section}'")
         elif not _section_has_content(lines, section):
-            errors.append(f"architecture.md: section '{section}' is empty")
+            errors.append(f"{label}: section '{section}' is empty")
 
     for i, line in enumerate(lines, 1):
         if TBD_RE.search(line):
-            errors.append(f"architecture.md:{i}: unresolved TBD: {line.strip()!r}")
+            errors.append(f"{label}:{i}: unresolved TBD: {line.strip()!r}")
 
     return errors
+
+
+def check_architecture(path: Path) -> list[str]:
+    if not path.exists():
+        return [f"{path}: file not found"]
+    return check_sectioned_lines(path.read_text().splitlines(), "architecture.md", REQUIRED_ARCH_SECTIONS)
+
+
+def check_deployment(path: Path) -> list[str]:
+    if not path.exists():
+        return [f"{path}: file not found"]
+    return check_sectioned_lines(path.read_text().splitlines(), "deployment.md", REQUIRED_DEPLOYMENT_SECTIONS)
 
 
 def check_plan(path: Path) -> list[str]:
@@ -84,8 +103,10 @@ def check_plan(path: Path) -> list[str]:
 
 
 def main(docs_dir: Path = Path("docs")) -> None:
-    errors = check_architecture(docs_dir / "architecture.md") + check_plan(
-        docs_dir / "plan.md"
+    errors = (
+        check_architecture(docs_dir / "architecture.md")
+        + check_deployment(docs_dir / "deployment.md")
+        + check_plan(docs_dir / "plan.md")
     )
 
     if errors:

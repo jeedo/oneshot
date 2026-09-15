@@ -114,7 +114,7 @@ jobs:
 
       # --redact so a hit never prints the secret into a public build log, which would leak it again.
       - name: Scan every commit
-        run: ./gitleaks git --no-banner --redact --exit-code 1 .
+        run: ./gitleaks git --no-banner --redact --exit-code 1 --config .gitleaks.toml .
 
   zap:
     name: ZAP baseline
@@ -174,3 +174,70 @@ jobs:
             app.log
           retention-days: 7
           if-no-files-found: warn
+
+  container:
+    name: Container (build, Trivy, SBOM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Build the image
+        run: docker build -f Containerfile -t oneshot:ci .
+
+      # Caught locally once already: the Web SDK's default content globs will publish Client/package.json and
+      # friends (dev tooling manifests) into the image unless explicitly excluded, and PDBs ship in a Release
+      # publish unless told not to. Neither is a vulnerability Trivy would flag, but neither belongs in an
+      # image whose whole point is to have nothing in it beyond the running app.
+      - name: The shipped image carries nothing but the published app
+        run: |
+          set -euo pipefail
+          cid="$(docker create oneshot:ci)"
+          trap 'docker rm -f "$cid" >/dev/null' EXIT
+          if docker export "$cid" | tar -tf - | grep -E '^app/(Client/|.*\.pdb$)'; then
+            echo "unexpected file(s) in the shipped image (listed above)"; exit 1
+          fi
+
+      # The same shape the image is meant to run in: read-only root filesystem, no named volumes, only a
+      # memory-backed tmpfs for whatever transient scratch space the runtime wants. Nothing in this app writes
+      # anything meant to survive a restart (T5) — if this does not come up healthy, something regressed.
+      - name: Smoke test read-only, with no volumes, behind the container's own HEALTHCHECK
+        run: |
+          set -euo pipefail
+          docker run -d --name oneshot-smoke --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            -p 8080:8080 \
+            -e ForwardedHeaders__KnownProxies__0=127.0.0.1 \
+            oneshot:ci
+          for _ in $(seq 1 90); do
+            status="$(docker inspect --format='{{.State.Health.Status}}' oneshot-smoke || true)"
+            if [ "$status" = "healthy" ]; then
+              if [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/healthz)" = "200" ]; then
+                echo "container is healthy and reachable"; exit 0
+              fi
+            fi
+            if [ "$status" = "unhealthy" ]; then
+              echo "container reported unhealthy"; docker logs oneshot-smoke; exit 1
+            fi
+            sleep 2
+          done
+          echo "container never became healthy"; docker logs oneshot-smoke; exit 1
+
+      - name: Stop the smoke container
+        if: always()
+        run: docker rm -f oneshot-smoke || true
+
+      # Scans the image actually shipped — OS packages and library layers together — rather than only the
+      # source-level dependency graph scripts/check_supply_chain.py already covers (T14).
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: oneshot:ci
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: oneshot:ci
+          format: spdx-json
+          output-file: sbom.spdx.json
+          artifact-name: oneshot-sbom.spdx.json

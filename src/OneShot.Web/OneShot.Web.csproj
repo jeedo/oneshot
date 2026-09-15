@@ -20,6 +20,10 @@
   <ItemGroup>
     <ClientSource Include="$(ClientRoot)src/**/*.ts" Exclude="$(ClientRoot)src/**/*.test.ts" />
     <ClientSource Include="$(ClientRoot)package.json;$(ClientRoot)package-lock.json;$(ClientRoot)tsconfig.json" />
+    <!-- The Web SDK's default globs otherwise treat Client/package.json, package-lock.json and tsconfig.json
+         as Content and publish them: dev tooling manifests with no reason to ship in the running app, let
+         alone the hardened container image (plan task 48). Only the built bundle below is served. -->
+    <Content Remove="$(ClientRoot)**" />
     <None Remove="$(ClientBundleHashFile)" />
     <EmbeddedResource Include="$(ClientBundleHashFile)" LogicalName="OneShot.Web.bundle.sha256" />
   </ItemGroup>

@@ -37,7 +37,9 @@ updates:
       github-actions-minor-patch:
         update-types: ["minor", "patch"]
 
-  # No Dockerfile exists yet (plan task 48); this entry starts working the day one lands at the repo root.
+  # Matches the repository-root Containerfile from plan task 48 — Dependabot's docker ecosystem has
+  # recognised that filename since dependabot-core#11141. Both base images are digest-pinned, so this
+  # entry is the only thing that will ever propose a newer one.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

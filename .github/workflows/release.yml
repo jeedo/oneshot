@@ -1,0 +1,142 @@
+name: Release
+
+# A push to main is the trigger, and branch protection is what makes that safe: every CI job (ci.yml) and
+# every security job (security.yml) is a required check, so a commit only reaches main having passed all of
+# them on its pull request. Re-running those gates here would double the cost to re-prove something already
+# proven — what this workflow adds is the tag, the signed image, and the SBOM. See docs/deployment.md for the
+# exact branch-protection settings this assumes, and plan task 53.
+on:
+  push:
+    branches: [main]
+  # A release that should have been cut and was not — a workflow outage, a token expiry — can be retried
+  # without an empty commit. semantic-release is idempotent: with no new releasable commits it does nothing.
+  workflow_dispatch:
+
+# Read-only by default. Every write scope below is granted to the single job that needs it, the same way
+# security.yml scopes security-events: write to CodeQL alone; ReleaseWorkflowTests fails the build if a write
+# scope appears at this level, where it would apply to every job anyone adds later.
+permissions:
+  contents: read
+
+concurrency:
+  # Never cancel a release in flight: a half-finished one leaves a tag with no image behind it.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  ContinuousIntegrationBuild: true
+
+jobs:
+  release:
+    name: Version and GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      # Creating the tag and the release. Not a branch write: no plugin here pushes a commit (.releaserc.yml).
+      contents: write
+    outputs:
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      version: ${{ steps.semantic.outputs.new_release_version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # commit-analyzer works out the bump from the commits since the last tag, so it needs them all.
+          fetch-depth: 0
+
+      - id: semantic
+        uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Say what happened
+        run: |
+          if [ "${{ steps.semantic.outputs.new_release_published }}" = "true" ]; then
+            echo "released ${{ steps.semantic.outputs.new_release_version }}"
+          else
+            echo "no releasable commits since the last tag; nothing to publish"
+          fi
+
+  image:
+    name: Sign and publish the image
+    needs: release
+    # Only when a version was actually cut. A docs-only push to main is release-silent under Conventional
+    # Commits, and publishing an image for a release that does not exist would be worse than publishing none.
+    if: needs.release.outputs.new_release_published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      # Pushing the image to GHCR.
+      packages: write
+      # Attaching the SBOM to the release created above.
+      contents: write
+      # The OIDC token cosign exchanges for a short-lived certificate. This is what makes signing keyless:
+      # there is no private key in this repository to steal, and the signature is bound to this workflow's
+      # identity rather than to whoever holds a file.
+      id-token: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The same Containerfile the security workflow builds and scans on every pull request, so what ships is
+      # the artefact those gates were run against.
+      - id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Containerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Signing the digest, not a tag: a tag can be repointed at different bytes later, and a signature over
+      # a tag would then vouch for something nobody reviewed. The digest names the artefact itself.
+      - name: Sign the image
+        run: cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"
+
+      # Built from the pushed image rather than the source tree, so it lists what actually shipped.
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+
+      # Attached here rather than through semantic-release's assets: the SBOM describes an image that could
+      # not exist until the release had been cut and the version named.
+      - name: Attach the SBOM to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "v${VERSION}" sbom.spdx.json --clobber
+
+      - name: Record what was published
+        run: |
+          {
+            echo "### Published"
+            echo
+            echo "- image: \`${IMAGE}:${VERSION}\`"
+            echo "- digest: \`${{ steps.push.outputs.digest }}\`"
+            echo "- signature: keyless, via this workflow's OIDC identity"
+            echo "- SBOM: attached to release \`v${VERSION}\` as \`sbom.spdx.json\`"
+            echo
+            echo "Verify with:"
+            echo '```'
+            echo "cosign verify ${IMAGE}@${{ steps.push.outputs.digest }} \\"
+            echo "  --certificate-identity-regexp '^https://github.com/${{ github.repository }}/' \\"
+            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

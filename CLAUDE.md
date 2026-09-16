@@ -130,6 +130,10 @@ Format: `<type>(<scope>): <description>`
 
 Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`
 
+These drive releases (plan task 53): `fix` cuts a patch and `feat` a minor. A `!` after the type
+(`feat(api)!: …`) or a `BREAKING CHANGE:` footer cuts a major. Every other type is release-silent, so a docs
+or CI change never mints a version — pick the type that describes the change, not the release you want.
+
 Examples:
 ```
 feat(store): add atomic TryConsume with tombstones

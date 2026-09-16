@@ -172,3 +172,50 @@ Concretely, on every platform this repository supports:
 
 If a future requirement genuinely needs secrets to survive a restart or to be shared across instances, that is
 a different system with a different threat model — it does not get bolted onto this one.
+
+## Releases, Signing and Branch Protection
+
+Releases are cut by `.github/workflows/release.yml` (plan task 53, issue #61). A push to `main` runs
+semantic-release, which reads the Conventional Commits since the last tag and decides the version: `fix:` a
+patch, `feat:` a minor, a `!` after the type or a `BREAKING CHANGE:` footer a major. `docs`, `chore`,
+`refactor`, `test` and `ci` are release-silent, so a documentation change does not mint a version. If a
+version is cut, the image is built from the same `Containerfile` the security workflow scans, pushed to
+`ghcr.io/jeedo/oneshot`, signed, and the SBOM of the pushed image is attached to the GitHub Release.
+
+No changelog file is generated and no bot ever commits to `main`: the release notes are the changelog. That is
+a deliberate choice — the alternative plugins push a commit straight to the release branch, which this
+repository's own rules forbid.
+
+### Verify before you deploy
+
+The image is signed **keyless**: there is no private key anywhere in this repository, and the signature is
+bound to the release workflow's own OIDC identity. Verify the digest you are about to run:
+
+```bash
+cosign verify ghcr.io/jeedo/oneshot@sha256:<digest> \
+  --certificate-identity-regexp '^https://github.com/jeedo/oneshot/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Signatures cover the **digest**, not the tag — a tag can later be repointed at different bytes, so verify and
+deploy by digest. The SBOM for that digest is attached to the matching GitHub Release as `sbom.spdx.json`.
+
+### Branch protection (required, and enabled by hand)
+
+The release workflow triggers on a push to `main` and does **not** re-run the CI and security gates. That is
+safe only because branch protection means a commit cannot reach `main` without having passed them on a pull
+request. **Without branch protection, `main` is an unguarded release trigger.**
+
+Branch protection cannot be set from the pipeline — it is an owner-level repository setting. Configure it on
+`main` under Settings → Branches:
+
+- **Require a pull request before merging**, with at least one approving review.
+- **Require status checks to pass**, with *Require branches to be up to date* on, and every one of these
+  selected: `Build, format and test`, `Client (tsc, vitest, bundle)`, `End to end (Playwright)`,
+  `Docs, threat coverage and scripts`, `CodeQL (csharp)`, `CodeQL (javascript-typescript)`,
+  `Dependency advisories`, `Secret scanning (gitleaks)`, `ZAP baseline`, `Container (build, Trivy, SBOM)`.
+- **Do not allow bypassing the above settings**, including for administrators.
+- **Restrict force pushes and deletions** on `main`.
+
+Leave auto-merge off. Dependabot pull requests are gated by exactly the same checks and still need a human
+approval, which is the control that makes an automated dependency bump safe to accept (T14).

@@ -203,6 +203,7 @@ Each table lists the threats that apply to the component, the register ID, and w
 | **Volumetric DoS beyond application rate limits** | Needs network-level mitigation | Out of scope; deployment docs point at the reverse proxy / CDN layer |
 | **Windows identity is only as trustworthy as the domain** | A compromised domain account produces a "valid" audit identity | Audit log is evidence of accountability, not proof of intent; retention and review in the runbook |
 | **Explicit TLS floor may age** | See Analyzer Suppressions below | Revisited at each dependency-update review |
+| **An unconfigured host serves plain HTTP outside Development** | Accepted decision. `DeploymentValidator` judges the addresses the host was *told* to bind; a bare `dotnet run` supplies none, so the HTTPS check has nothing to fail and the app listens on `http://localhost:5000`. Keeping it that way means a server can be started for local work and for integration testing without standing up TLS first | A real deployment always configures its addresses — through `--urls`, `ASPNETCORE_URLS`, or the container's port — and is then validated normally and refused if it is plain HTTP with no declared proxy. Every CI integration path (the Playwright suite, the ZAP baseline, the container smoke test) additionally declares `ForwardedHeaders__KnownProxies__0`, so none of them depends on this |
 
 ## Test Convention
 

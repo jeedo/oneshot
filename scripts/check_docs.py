@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Check docs/architecture.md, docs/deployment.md, docs/runbook.md and docs/plan.md for common issues.
+"""Check docs/architecture.md, docs/deployment.md, docs/runbook.md, docs/security-review.md and docs/plan.md for common issues.
 
 Checks:
   architecture.md — required sections present and non-empty, no TBD markers
   deployment.md   — required sections present and non-empty, no TBD markers
   runbook.md      — required sections present and non-empty, no TBD markers
+  security-review.md — required sections present and non-empty, no TBD markers
   plan.md         — tasks sequentially numbered, no TBD markers
 """
 
@@ -32,6 +33,15 @@ REQUIRED_RUNBOOK_SECTIONS = [
     "Audit Log Retention",
     "PII and Windows Account Names",
     "Suspected Compromise",
+]
+
+REQUIRED_SECURITY_REVIEW_SECTIONS = [
+    "Scope and Method",
+    "ASVS 4.0 Level 2",
+    "Threat Register",
+    "Security CI Results",
+    "Findings",
+    "Sign-off",
 ]
 
 TASK_RE = re.compile(r"^\s*- \[[ x]\] (\d+)\. ")
@@ -88,6 +98,13 @@ def check_runbook(path: Path) -> list[str]:
     return check_sectioned_lines(path.read_text().splitlines(), "runbook.md", REQUIRED_RUNBOOK_SECTIONS)
 
 
+def check_security_review(path: Path) -> list[str]:
+    if not path.exists():
+        return [f"{path}: file not found"]
+    return check_sectioned_lines(
+        path.read_text().splitlines(), "security-review.md", REQUIRED_SECURITY_REVIEW_SECTIONS)
+
+
 def check_plan(path: Path) -> list[str]:
     errors: list[str] = []
     if not path.exists():
@@ -121,6 +138,7 @@ def main(docs_dir: Path = Path("docs")) -> None:
         check_architecture(docs_dir / "architecture.md")
         + check_deployment(docs_dir / "deployment.md")
         + check_runbook(docs_dir / "runbook.md")
+        + check_security_review(docs_dir / "security-review.md")
         + check_plan(docs_dir / "plan.md")
     )
 

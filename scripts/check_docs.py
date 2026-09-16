@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Check docs/architecture.md, docs/deployment.md and docs/plan.md for common issues.
+"""Check docs/architecture.md, docs/deployment.md, docs/runbook.md and docs/plan.md for common issues.
 
 Checks:
   architecture.md — required sections present and non-empty, no TBD markers
   deployment.md   — required sections present and non-empty, no TBD markers
+  runbook.md      — required sections present and non-empty, no TBD markers
   plan.md         — tasks sequentially numbered, no TBD markers
 """
 
@@ -24,6 +25,13 @@ REQUIRED_DEPLOYMENT_SECTIONS = [
     "TLS Certificates",
     "Memory Limits",
     "No Persistence Layer",
+]
+
+REQUIRED_RUNBOOK_SECTIONS = [
+    "Restart Semantics",
+    "Audit Log Retention",
+    "PII and Windows Account Names",
+    "Suspected Compromise",
 ]
 
 TASK_RE = re.compile(r"^\s*- \[[ x]\] (\d+)\. ")
@@ -74,6 +82,12 @@ def check_deployment(path: Path) -> list[str]:
     return check_sectioned_lines(path.read_text().splitlines(), "deployment.md", REQUIRED_DEPLOYMENT_SECTIONS)
 
 
+def check_runbook(path: Path) -> list[str]:
+    if not path.exists():
+        return [f"{path}: file not found"]
+    return check_sectioned_lines(path.read_text().splitlines(), "runbook.md", REQUIRED_RUNBOOK_SECTIONS)
+
+
 def check_plan(path: Path) -> list[str]:
     errors: list[str] = []
     if not path.exists():
@@ -106,6 +120,7 @@ def main(docs_dir: Path = Path("docs")) -> None:
     errors = (
         check_architecture(docs_dir / "architecture.md")
         + check_deployment(docs_dir / "deployment.md")
+        + check_runbook(docs_dir / "runbook.md")
         + check_plan(docs_dir / "plan.md")
     )
 

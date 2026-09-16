@@ -145,7 +145,7 @@ Run from the project root:
 
 | Script | Usage | Description |
 |--------|-------|-------------|
-| `check_docs.py` | `python3 scripts/check_docs.py` | Validate architecture.md and plan.md (required sections, numbering, TBD markers) |
+| `check_docs.py` | `python3 scripts/check_docs.py` | Validate architecture.md, deployment.md, runbook.md and plan.md (required sections, numbering, TBD markers) |
 | `renumber_tasks.py` | `python3 scripts/renumber_tasks.py` | Restore sequential numbering after adding/removing tasks |
 | `complete_task.py` | `python3 scripts/complete_task.py <N>` | Mark task N as complete |
 | `get_phase_tasks.py` | `python3 scripts/get_phase_tasks.py <phase>` | List tasks for a phase (by name or number) |

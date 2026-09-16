@@ -1,0 +1,32 @@
+# semantic-release configuration (plan task 53, issue #61, T14).
+#
+# This repository already writes Conventional Commits (see CLAUDE.md), which is exactly what commit-analyzer
+# parses, so the version is derived from the history rather than chosen by hand: `fix:` cuts a patch, `feat:`
+# a minor, and a `!` after the type or a `BREAKING CHANGE:` footer a major. Every other type this repository
+# uses — docs, chore, refactor, test, ci — is release-silent, so a documentation or pipeline change does not
+# mint a version nobody needed.
+#
+# Only three plugins, and the two that are deliberately absent matter as much as the three that are here:
+#
+#   @semantic-release/changelog and @semantic-release/git are the usual tutorial pair, and both work by
+#   pushing a commit back to the release branch. That would put a bot commit straight onto main — against
+#   this repository's own rule ("Always branch from main — never commit directly to main") and against the
+#   branch protection task 53 turns on. The GitHub Release notes are the changelog; nothing needs to land on
+#   main outside a reviewed pull request. ReleaseWorkflowTests holds that decision in place.
+#
+#   @semantic-release/npm is absent because nothing here is published to a package registry. The deliverable
+#   is the signed container image the release workflow pushes to GHCR.
+#
+# The tag and the GitHub Release are created with the workflow's own GITHUB_TOKEN. The action's README warns
+# that GITHUB_TOKEN cannot operate on protected branches — that warning is about the changelog/git plugins
+# pushing commits to the branch, which this configuration does not do. Creating a tag and a release is not a
+# branch write, so no personal access token is needed.
+branches:
+  - main
+
+plugins:
+  - "@semantic-release/commit-analyzer"
+  - "@semantic-release/release-notes-generator"
+  # The SBOM is attached in a later step rather than here: it is generated from the image that was actually
+  # pushed, which cannot exist until this plugin has created the release and named the version.
+  - "@semantic-release/github"

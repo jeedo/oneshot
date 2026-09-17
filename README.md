@@ -100,3 +100,7 @@ npm --prefix tests/e2e run check                # Playwright, against a self-sta
 
 Every security test names the threat it covers, and `scripts/check_threat_coverage.py` fails the build if any
 threat in the model loses its test. [`CLAUDE.md`](CLAUDE.md) has the full set of local checks.
+
+## License
+
+[Apache License 2.0](LICENSE).

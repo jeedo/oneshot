@@ -85,15 +85,19 @@ test.describe('[T4] a foreign origin cannot reach the consume path', () => {
     const revealUrl = `${baseURL}/api/secrets/${id}/reveal`;
     await openAttackerPage(page, '');
 
-    let status = 0;
-    page.on('response', (response) => {
-      if (response.url() === revealUrl) {
-        status = response.status();
+    let failure = '';
+    page.on('requestfailed', (request) => {
+      if (request.url() === revealUrl) {
+        failure = request.failure()?.errorText ?? '';
       }
     });
 
     // no-cors is the only cross-origin fetch that skips the preflight, and the price is that it may carry
     // neither a custom header nor a JSON content type — so it cannot look like the page's own reveal.
+    // Cross-Origin-Resource-Policy: same-origin (T8, issue #50) means the browser no longer even hands the
+    // attacker's script an opaque response for this: NotSameOrigin below is Chromium naming the specific
+    // reason it discarded a response the server did send — a strictly stronger, more specific signal than
+    // the plain no-cors opacity this test used to rely on.
     const outcome = await page.evaluate(async (url) => {
       try {
         const response = await fetch(url, {
@@ -108,13 +112,9 @@ test.describe('[T4] a foreign origin cannot reach the consume path', () => {
       }
     }, revealUrl);
 
-    expect(outcome.threw).toBe(false);
-    // Opaque: the attacker's script sees no status, no headers, and not one byte of the body.
-    expect(outcome.type).toBe('opaque');
-    expect(outcome.status).toBe(0);
-    expect(outcome.body).toBe('');
-    // The server nonetheless saw it and said no — the opacity above is not what saved the secret.
-    await expect.poll(() => status).toBe(403);
+    expect(outcome.threw).toBe(true);
+    expect(outcome.message).toContain('Failed to fetch');
+    await expect.poll(() => failure).toBe('net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin');
     expect(await peekState(page, id)).toBe('available');
   });
 
@@ -163,18 +163,22 @@ test.describe('[T4] a foreign origin cannot reach the consume path', () => {
     const peekUrl = `${baseURL}/api/secrets/${id}`;
     await openAttackerPage(page, `<img src="${peekUrl}" alt="" /><script src="${peekUrl}"></script>`);
 
+    // Cross-Origin-Resource-Policy: same-origin (T8, issue #50) blocks both now: a plain no-cors fetch used
+    // to resolve opaquely (the body hidden but the promise still fulfilled), and it no longer does either —
+    // and the CORS fetch below was already unreadable with no Access-Control-Allow-Origin in the response.
     const outcome = await page.evaluate(async (url) => {
-      const opaque = await fetch(url, { mode: 'no-cors' });
-      try {
-        await fetch(url);
-        return { opaqueType: opaque.type, cors: 'resolved' };
-      } catch (error) {
-        return { opaqueType: opaque.type, cors: `rejected ${(error as Error).name}` };
-      }
+      const attempt = async (init?: RequestInit) => {
+        try {
+          await fetch(url, init);
+          return 'resolved';
+        } catch (error) {
+          return `rejected ${(error as Error).name}`;
+        }
+      };
+      return { noCors: await attempt({ mode: 'no-cors' }), cors: await attempt() };
     }, peekUrl);
 
-    expect(outcome.opaqueType).toBe('opaque');
-    // Without Access-Control-Allow-Origin even the harmless state field is unreadable from another origin.
+    expect(outcome.noCors).toBe('rejected TypeError');
     expect(outcome.cors).toBe('rejected TypeError');
     expect(await peekState(page, id)).toBe('available');
   });
@@ -191,7 +195,9 @@ test.describe('[T4] a foreign origin cannot reach the consume path', () => {
 
     await page.evaluate(async (url) => {
       (document.getElementById('f') as HTMLFormElement).submit();
-      await fetch(url, { method: 'POST', mode: 'no-cors', body: '{}' });
+      // Cross-Origin-Resource-Policy (issue #50) makes this reject now instead of resolving opaquely — this
+      // attempt is a no-op either way, which is all this test cares about.
+      await fetch(url, { method: 'POST', mode: 'no-cors', body: '{}' }).catch(() => {});
     }, revealUrl);
     await expect.poll(() => peekState(page, id)).toBe('available');
 

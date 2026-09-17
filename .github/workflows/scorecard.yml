@@ -42,6 +42,10 @@ jobs:
           # disclosure: the score, and which checks fail, become public for anyone who looks. That is the
           # point of putting the badge on a public repository — a badge nobody can verify is decoration.
           publish_results: true
+          # The default GITHUB_TOKEN cannot read classic branch-protection settings, so the Branch-Protection
+          # check errors instead of scoring (issue #70). A fine-grained PAT scoped to this repository alone,
+          # read-only Administration, lets it actually see the protection that is already configured.
+          repo_token: ${{ secrets.SCORECARD_TOKEN }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

@@ -32,6 +32,13 @@ internal static class SecurityHeaders
         headers.XFrameOptions = "DENY";
         headers["Referrer-Policy"] = "no-referrer";
         headers["Permissions-Policy"] = PermissionsPolicy;
+        // Site isolation against Spectre-class side-channel reads (T8, ZAP 90004, issue #50). The page has no
+        // cross-origin subresources at all (CSP already limits every fetch to 'self' and one first-party
+        // script hash), so the strict values cost nothing here and there is no legitimate reason for another
+        // origin to embed or read this app's responses.
+        headers["Cross-Origin-Embedder-Policy"] = "require-corp";
+        headers["Cross-Origin-Opener-Policy"] = "same-origin";
+        headers["Cross-Origin-Resource-Policy"] = "same-origin";
 
         if (IsSecretPath(context.Request.Path))
         {

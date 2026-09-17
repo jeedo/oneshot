@@ -41,6 +41,12 @@ public sealed class SecurityHeadersTests : IClassFixture<OneShotFactory>
         Assert.Equal("no-referrer", Header(response, "Referrer-Policy"));
         Assert.Equal("DENY", Header(response, "X-Frame-Options"));
         Assert.Equal(ExpectedPermissionsPolicy, Header(response, "Permissions-Policy"));
+        // Site isolation against Spectre-class side-channel reads (ZAP 90004, issue #50): every response
+        // opts out of being embedded or read cross-origin, on top of what CSP's frame-ancestors already
+        // covers for framing specifically.
+        Assert.Equal("require-corp", Header(response, "Cross-Origin-Embedder-Policy"));
+        Assert.Equal("same-origin", Header(response, "Cross-Origin-Opener-Policy"));
+        Assert.Equal("same-origin", Header(response, "Cross-Origin-Resource-Policy"));
     }
 
     [Theory]

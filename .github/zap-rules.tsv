@@ -6,20 +6,22 @@
 # a deliberate decision and which test holds that decision in place; anything not listed is reported, and
 # scripts/check_zap_report.py fails the build on Medium or higher.
 #
-# What the scan actually reports, from the first CI run of this workflow (ZAP 2.17.0, the app in Production):
-# nothing at Medium or above, and check_zap_report.py graded the report 3 Low and 8 Informational. One rule is
-# suppressed, 10109 below. The other four are left reported rather than suppressed — they are below the gate,
-# and a Low that turns into something worse should not already be on an allowlist:
+# What the scan actually reports, as of task 55 (ZAP 2.17.0, the app in Production): nothing at Medium or
+# above, and check_zap_report.py grades the report 0 Low, 8 Informational. One rule is suppressed, 10109
+# below. The other three are left reported rather than suppressed — they are below the gate, and a Low that
+# turns into something worse should not already be on an allowlist:
 #
 #   10049 Non-Storable Content   — the secret paths send no-store and Pragma: no-cache precisely so a
 #                                  plaintext page never reaches a cache. ZAP notes the absence of storability;
 #                                  that absence is the mitigation (T9).
 #   10094 Base64 Disclosure      — the base64 it finds is the bundle's SRI integrity attribute and the CSP
 #                                  script-src hash, both public by construction (T7).
-#   90004 Site isolation         — Cross-Origin-Embedder-Policy, -Opener-Policy and -Resource-Policy are not
-#                                  set. Real, small and outside this task, which adds CI rather than changing
-#                                  what the app sends; the response headers live in Security/SecurityHeaders.cs.
 #   90005 Sec-Fetch-Dest missing — a property of ZAP's own requests, not of the app's responses.
+#
+# 90004 Site isolation (Cross-Origin-Embedder-Policy, -Opener-Policy, -Resource-Policy) used to be reported
+# here too — it was the last remaining Low, and the reason this file went from "3 Low" to "0 Low" — until
+# task 55 (T8, issue #50) added all three headers in Security/SecurityHeaders.cs. No longer applicable, so
+# no longer listed.
 #
 # An earlier note here recorded "exactly one alert, no Low", from a hand-driven run over 15 listed URLs. The
 # baseline action also spiders, so it reaches robots.txt, sitemap.xml and favicon.ico and sees more. The CI

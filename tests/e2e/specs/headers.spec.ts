@@ -21,6 +21,9 @@ test.describe('[T7] [T8] the real listener sends the hardening headers and nothi
       expect(headers['referrer-policy']).toBe('no-referrer');
       expect(headers['x-frame-options']).toBe('DENY');
       expect(headers['permissions-policy']).toBe(PERMISSIONS_POLICY);
+      expect(headers['cross-origin-embedder-policy']).toBe('require-corp');
+      expect(headers['cross-origin-opener-policy']).toBe('same-origin');
+      expect(headers['cross-origin-resource-policy']).toBe('same-origin');
       expect(headers['content-security-policy']).toMatch(
         /^default-src 'none'; script-src 'sha256-[A-Za-z0-9+/]{43}='; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'$/,
       );

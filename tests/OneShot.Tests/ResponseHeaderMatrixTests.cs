@@ -159,6 +159,11 @@ public sealed class ResponseHeaderMatrixTests : IClassFixture<OneShotFactory>
         Assert.Equal("no-referrer", Single(response, "Referrer-Policy"));
         Assert.Equal("DENY", Single(response, "X-Frame-Options"));
         Assert.Equal(PermissionsPolicy, Single(response, "Permissions-Policy"));
+        // Site isolation against Spectre-class side-channel reads (ZAP 90004, issue #50) — held to the same
+        // "every response, not just the happy path" standard as the rest of this matrix.
+        Assert.Equal("require-corp", Single(response, "Cross-Origin-Embedder-Policy"));
+        Assert.Equal("same-origin", Single(response, "Cross-Origin-Opener-Policy"));
+        Assert.Equal("same-origin", Single(response, "Cross-Origin-Resource-Policy"));
 
         // TestServer never adds a Server header of its own, so this guards only against the app adding one;
         // the real Kestrel listener is checked in tests/e2e/specs/headers.spec.ts.

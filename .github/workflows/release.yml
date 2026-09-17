@@ -127,8 +127,23 @@ jobs:
 
       # Signing the digest, not a tag: a tag can be repointed at different bytes later, and a signature over
       # a tag would then vouch for something nobody reviewed. The digest names the artefact itself.
+      #
+      # Retried: Fulcio is a third-party network dependency of a keyless signature, just like the registry is
+      # for the pull above (issue #66, security review F1) — a transient connection reset should not leave a
+      # pushed, unsigned image behind. Not theoretical: the first real release (v1.1.0) hit exactly this
+      # failure mode signing the SBOM below and needed a manual re-run to recover.
       - name: Sign the image
-        run: cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"
+        run: |
+          set -euo pipefail
+          attempt=0
+          until cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 3 ]; then
+              echo "cosign sign failed after 3 attempts"; exit 1
+            fi
+            echo "sign attempt $attempt failed; retrying"
+            sleep $((attempt * 5))
+          done
 
       # Built from the pushed image rather than the source tree, so it lists what actually shipped.
       - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
@@ -142,8 +157,20 @@ jobs:
       # (issue #71) looks at what is attached to the GitHub Release, which is a different artifact from the
       # image in GHCR — signing the image alone leaves the release itself unsigned. --bundle is required as of
       # cosign v3 and writes the standardized Sigstore bundle format, which is what *.sigstore.json names.
+      # Retried for the same reason as "Sign the image" above — this exact step is what actually failed on
+      # v1.1.0's release ("read tcp ...: connection reset by peer" talking to fulcio.sigstore.dev).
       - name: Sign the SBOM
-        run: cosign sign-blob --yes --bundle sbom.spdx.json.sigstore.json sbom.spdx.json
+        run: |
+          set -euo pipefail
+          attempt=0
+          until cosign sign-blob --yes --bundle sbom.spdx.json.sigstore.json sbom.spdx.json; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 3 ]; then
+              echo "cosign sign-blob failed after 3 attempts"; exit 1
+            fi
+            echo "sign attempt $attempt failed; retrying"
+            sleep $((attempt * 5))
+          done
 
       # Attached here rather than through semantic-release's assets: the SBOM describes an image that could
       # not exist until the release had been cut and the version named.

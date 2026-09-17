@@ -167,3 +167,28 @@ different: check whether the advisory affects a package this app actually ships.
 deliberately tiny runtime surface, pinned by `packages.lock.json` and asserted by `SupplyChainTests`, and the
 client has no runtime dependencies at all. `python3 scripts/check_supply_chain.py` answers the question
 directly, and the scheduled security workflow runs it weekly against current advisories.
+
+## Recovering a Failed Release
+
+`release.yml` (task 53) is two jobs: `release` cuts the version, tag and GitHub Release from semantic-release;
+`image` builds, signs and publishes the container image and attaches the SBOM. They can fail independently,
+and base images are pulled by digest on every run (T14), so a registry blip is always possible — both jobs
+retry that pull three times before failing (issue #66, security review F1).
+
+**If `image` fails anyway** — retries exhausted, or a GHCR auth hiccup, or anything else — the GitHub Release
+from `release` already exists, with no image behind it. Re-running the whole workflow via `workflow_dispatch`
+does **not** fix this: semantic-release is idempotent, finds no new releasable commits since the tag it
+already cut, and `release` reports `new_release_published: false` — which skips `image` entirely on the rerun
+too.
+
+The recovery path is GitHub's **"Re-run failed jobs"** on that specific run (Actions tab → the failed run →
+Re-run jobs → Re-run failed jobs). This re-executes only `image`; `release`'s outputs from the original
+successful run — the version, `new_release_published: true` — are reused rather than recomputed, so `image`
+runs against the release it should have attached to in the first place.
+
+If the retried pull fails all three attempts in **both** `security.yml`'s `container` job and `release.yml`'s
+`image` job on the same commit, that is very likely a genuine upstream outage rather than anything about this
+repository or commit — wait for it to clear and re-run, the same way.
+
+Nothing needs manual cleanup in the meantime: a GitHub Release with no image attached is confusing, not
+unsafe. `docker pull` against a tag with no matching image simply fails, the same as any other missing tag.

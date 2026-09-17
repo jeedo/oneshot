@@ -46,18 +46,15 @@ accepts — including the big one: **anyone who sees the link can read the secre
 
 ## Running it
 
-There is no `Properties/launchSettings.json` ([#78](https://github.com/jeedo/oneshot/issues/78)), so a bare
-`dotnet run` starts in `Production`, not `Development` — set the environment explicitly for local work.
-
 ### Development
 
 ```bash
-ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/OneShot.Web   # http://localhost:5000
+dotnet run --project src/OneShot.Web   # http://localhost:5000
 ```
 
-`Development` is the only environment where `DeploymentValidator` (below) is skipped, so this is the form to
-use for anything beyond the bare default — testing from another device on the same network, passing `--urls`,
-or reproducing a deployment scenario locally.
+`Properties/launchSettings.json` sets `Development`, the only environment where `DeploymentValidator` (below)
+is skipped — this is the form to use for ordinary local work, testing from another device on the same
+network, or passing `--urls`.
 
 ### Production
 
@@ -72,10 +69,11 @@ docker run --read-only --tmpfs /tmp -p 8080:8080 \
 
 Outside `Development`, `DeploymentValidator` refuses to start the host at all if the deployment is unsafe —
 most commonly because only plain-HTTP addresses are configured with no trusted proxy declared. To see the
-refusal itself:
+refusal itself, `--no-launch-profile` is required — otherwise `launchSettings.json`'s own `Development`
+setting wins and the refusal never triggers:
 
 ```bash
-dotnet run --project src/OneShot.Web --urls http://localhost:5055
+dotnet run --project src/OneShot.Web --no-launch-profile --urls http://localhost:5055
 ```
 
 The log line names the exact condition that failed.

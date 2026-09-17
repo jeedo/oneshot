@@ -134,13 +134,16 @@ jobs:
       # Production, because that is the configuration being shipped and the one the startup validation of task
       # 49 governs. Loopback is declared a known proxy to stand in for TLS terminating upstream, which is what
       # lets a plain-HTTP listener pass that validation — the same arrangement the browser suite uses.
+      # --no-launch-profile: Properties/launchSettings.json (issue #78) sets ASPNETCORE_ENVIRONMENT=Development
+      # and dotnet applies that unconditionally, overriding the Production set below rather than deferring to
+      # it — confirmed the hard way against tests/e2e's own webServer, which needed the identical fix.
       - name: Start the app
         env:
           ASPNETCORE_ENVIRONMENT: Production
           ForwardedHeaders__KnownProxies__0: 127.0.0.1
         run: |
           set -euo pipefail
-          nohup dotnet run --project src/OneShot.Web --configuration Release --no-build \
+          nohup dotnet run --project src/OneShot.Web --configuration Release --no-build --no-launch-profile \
             --urls http://127.0.0.1:5199 > app.log 2>&1 &
           for _ in $(seq 1 60); do
             if [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5199/healthz)" = "200" ]; then

@@ -181,8 +181,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # Retried because the pull is a network round trip to mcr.microsoft.com every time — base images are
+      # pinned by digest (T14), so there is no local-cache path that makes a registry blip self-healing.
+      # Nothing past this point is retried: a Trivy finding, a smoke-test failure, or a scan failure is a real
+      # result and must stay fatal on the first occurrence (issue #66, security review F1).
       - name: Build the image
-        run: docker build -f Containerfile -t oneshot:ci .
+        run: |
+          set -euo pipefail
+          attempt=0
+          until docker build -f Containerfile -t oneshot:ci .; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 3 ]; then
+              echo "docker build failed after 3 attempts"; exit 1
+            fi
+            echo "build attempt $attempt failed; retrying"
+            sleep $((attempt * 5))
+          done
 
       # Caught locally once already: the Web SDK's default content globs will publish Client/package.json and
       # friends (dev tooling manifests) into the image unless explicitly excluded, and PDBs ship in a Release

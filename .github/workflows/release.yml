@@ -85,6 +85,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Warms the local image cache before the real build, retried, so a transient registry outage does not
+      # turn into a tag and GitHub Release with no image behind them — semantic-release has already published
+      # both by the time this job runs. No setup-buildx-action step means build-push-action below uses the
+      # "docker" driver, which shares this cache; a pull here is a pull the build below does not need to
+      # repeat (issue #66, security review F1). Read straight from the Containerfile so this can never drift
+      # from what it actually pins.
+      - name: Pull base images (retried)
+        run: |
+          set -euo pipefail
+          mapfile -t images < <(grep -oP '(?<=^FROM )\S+' Containerfile)
+          for image in "${images[@]}"; do
+            attempt=0
+            until docker pull "$image"; do
+              attempt=$((attempt + 1))
+              if [ "$attempt" -ge 3 ]; then
+                echo "failed to pull $image after 3 attempts"; exit 1
+              fi
+              echo "pull attempt $attempt of $image failed; retrying"
+              sleep $((attempt * 5))
+            done
+          done
+
       # The same Containerfile the security workflow builds and scans on every pull request, so what ships is
       # the artefact those gates were run against.
       - id: push

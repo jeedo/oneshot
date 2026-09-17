@@ -116,12 +116,19 @@ jobs:
           output-file: sbom.spdx.json
           upload-artifact: false
 
+      # A cosign signature over the SBOM itself, not just the image: OpenSSF Scorecard's Signed-Releases check
+      # (issue #71) looks at what is attached to the GitHub Release, which is a different artifact from the
+      # image in GHCR — signing the image alone leaves the release itself unsigned. --bundle is required as of
+      # cosign v3 and writes the standardized Sigstore bundle format, which is what *.sigstore.json names.
+      - name: Sign the SBOM
+        run: cosign sign-blob --yes --bundle sbom.spdx.json.sigstore.json sbom.spdx.json
+
       # Attached here rather than through semantic-release's assets: the SBOM describes an image that could
       # not exist until the release had been cut and the version named.
-      - name: Attach the SBOM to the release
+      - name: Attach the SBOM and its signature to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "v${VERSION}" sbom.spdx.json --clobber
+        run: gh release upload "v${VERSION}" sbom.spdx.json sbom.spdx.json.sigstore.json --clobber
 
       - name: Record what was published
         run: |
@@ -131,12 +138,20 @@ jobs:
             echo "- image: \`${IMAGE}:${VERSION}\`"
             echo "- digest: \`${{ steps.push.outputs.digest }}\`"
             echo "- signature: keyless, via this workflow's OIDC identity"
-            echo "- SBOM: attached to release \`v${VERSION}\` as \`sbom.spdx.json\`"
+            echo "- SBOM: attached to release \`v${VERSION}\` as \`sbom.spdx.json\`, signed as \`sbom.spdx.json.sigstore.json\`"
             echo
-            echo "Verify with:"
+            echo "Verify the image with:"
             echo '```'
             echo "cosign verify ${IMAGE}@${{ steps.push.outputs.digest }} \\"
             echo "  --certificate-identity-regexp '^https://github.com/${{ github.repository }}/' \\"
             echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
+            echo '```'
+            echo
+            echo "Verify the SBOM with:"
+            echo '```'
+            echo "cosign verify-blob --bundle sbom.spdx.json.sigstore.json \\"
+            echo "  --certificate-identity-regexp '^https://github.com/${{ github.repository }}/' \\"
+            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com \\"
+            echo "  sbom.spdx.json"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

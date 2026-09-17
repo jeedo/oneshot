@@ -75,7 +75,15 @@ cosign verify ghcr.io/jeedo/oneshot@sha256:<digest> \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-The SBOM for that digest is attached to the matching GitHub Release as `sbom.spdx.json`.
+The SBOM for that digest is attached to the matching GitHub Release as `sbom.spdx.json`, itself signed the same
+keyless way as `sbom.spdx.json.sigstore.json`:
+
+```bash
+cosign verify-blob --bundle sbom.spdx.json.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/jeedo/oneshot/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  sbom.spdx.json
+```
 
 ## Documentation
 

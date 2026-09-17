@@ -34,7 +34,12 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `dotnet run --project ../../src/OneShot.Web --urls ${baseURL}`,
+    // --no-launch-profile: Properties/launchSettings.json (issue #78) sets ASPNETCORE_ENVIRONMENT=Development
+    // for local `dotnet run`, and dotnet applies that unconditionally — it overrides an inherited environment
+    // variable of the same name rather than deferring to it. Confirmed the hard way: without this flag, this
+    // suite silently ran against Development instead of Production and two specs failed. The suite needs full
+    // control of its own environment, not whatever a developer's local default happens to be.
+    command: `dotnet run --project ../../src/OneShot.Web --no-launch-profile --urls ${baseURL}`,
     // Production, so the suite exercises the deployment the startup validation of task 49 actually allows.
     // Declaring loopback as a known proxy stands in for TLS terminating upstream, which is what lets a
     // plain-HTTP listener pass validation.

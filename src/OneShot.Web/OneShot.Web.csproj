@@ -6,6 +6,8 @@
     <ClientRoot>Client/</ClientRoot>
     <ClientBundle>wwwroot/js/oneshot.js</ClientBundle>
     <ClientBundleHashFile>$(ClientRoot)bundle.sha256</ClientBundleHashFile>
+    <ClientStylesheet>wwwroot/css/oneshot.css</ClientStylesheet>
+    <ClientStylesheetHashFile>$(ClientRoot)styles.sha256</ClientStylesheetHashFile>
     <DefaultItemExcludes>$(DefaultItemExcludes);$(ClientRoot)node_modules/**</DefaultItemExcludes>
   </PropertyGroup>
 
@@ -19,24 +21,30 @@
 
   <ItemGroup>
     <ClientSource Include="$(ClientRoot)src/**/*.ts" Exclude="$(ClientRoot)src/**/*.test.ts" />
+    <ClientSource Include="$(ClientRoot)src/**/*.css" />
     <ClientSource Include="$(ClientRoot)package.json;$(ClientRoot)package-lock.json;$(ClientRoot)tsconfig.json" />
     <!-- The Web SDK's default globs otherwise treat Client/package.json, package-lock.json and tsconfig.json
          as Content and publish them: dev tooling manifests with no reason to ship in the running app, let
-         alone the hardened container image (plan task 48). Only the built bundle below is served. -->
+         alone the hardened container image (plan task 48). Only the built bundle and stylesheet below are
+         served. -->
     <Content Remove="$(ClientRoot)**" />
     <None Remove="$(ClientBundleHashFile)" />
     <EmbeddedResource Include="$(ClientBundleHashFile)" LogicalName="OneShot.Web.bundle.sha256" />
+    <None Remove="$(ClientStylesheetHashFile)" />
+    <EmbeddedResource Include="$(ClientStylesheetHashFile)" LogicalName="OneShot.Web.styles.sha256" />
   </ItemGroup>
 
   <Target Name="RestoreClient" Inputs="$(ClientRoot)package-lock.json" Outputs="$(ClientRoot)node_modules/.package-lock.json">
     <Exec Command="npm ci --ignore-scripts --no-audit --no-fund" WorkingDirectory="$(ClientRoot)" />
   </Target>
 
-  <Target Name="BuildClient" DependsOnTargets="RestoreClient" BeforeTargets="BeforeBuild" Inputs="@(ClientSource)" Outputs="$(ClientBundle)">
+  <Target Name="BuildClient" DependsOnTargets="RestoreClient" BeforeTargets="BeforeBuild" Inputs="@(ClientSource)" Outputs="$(ClientBundle);$(ClientStylesheet)">
     <Exec Command="npm run build" WorkingDirectory="$(ClientRoot)" />
     <ItemGroup>
       <Content Remove="$(ClientBundle)" />
       <Content Include="$(ClientBundle)" CopyToPublishDirectory="PreserveNewest" />
+      <Content Remove="$(ClientStylesheet)" />
+      <Content Include="$(ClientStylesheet)" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
   </Target>
 
@@ -61,6 +69,30 @@
   <Target Name="UpdateClientBundleHash" DependsOnTargets="ComputeClientBundleHash">
     <WriteLinesToFile File="$(ClientBundleHashFile)" Lines="$(ComputedClientBundleHash)" Overwrite="true" WriteOnlyWhenDifferent="true" />
     <Message Importance="high" Text="Recorded client bundle hash $(ComputedClientBundleHash) in $(ClientBundleHashFile)." />
+  </Target>
+
+  <Target Name="ComputeClientStylesheetHash" DependsOnTargets="BuildClient">
+    <GetFileHash Files="$(ClientStylesheet)" Algorithm="SHA256" HashEncoding="base64">
+      <Output TaskParameter="Hash" PropertyName="ComputedClientStylesheetHash" />
+    </GetFileHash>
+  </Target>
+
+  <!-- Same pattern as the bundle hash above (T7), for the layout's stylesheet integrity attribute. No CSP
+       change needed either way: style-src 'self' already permits a same-origin stylesheet (issue #80). -->
+  <Target Name="VerifyClientStylesheetHash" DependsOnTargets="ComputeClientStylesheetHash" BeforeTargets="CoreCompile">
+    <Error Condition="!Exists('$(ClientStylesheetHashFile)')" Text="$(ClientStylesheetHashFile) is missing. Run: dotnet msbuild src/OneShot.Web -t:UpdateClientStylesheetHash" />
+    <ReadLinesFromFile File="$(ClientStylesheetHashFile)">
+      <Output TaskParameter="Lines" ItemName="RecordedClientStylesheetHashLine" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <RecordedClientStylesheetHash>@(RecordedClientStylesheetHashLine)</RecordedClientStylesheetHash>
+    </PropertyGroup>
+    <Error Condition="'$(RecordedClientStylesheetHash.Trim())' != '$(ComputedClientStylesheetHash)'" Text="Client stylesheet hash is stale: $(ClientStylesheetHashFile) records '$(RecordedClientStylesheetHash)' but $(ClientStylesheet) hashes to '$(ComputedClientStylesheetHash)'. Review the stylesheet change, then run: dotnet msbuild src/OneShot.Web -t:UpdateClientStylesheetHash" />
+  </Target>
+
+  <Target Name="UpdateClientStylesheetHash" DependsOnTargets="ComputeClientStylesheetHash">
+    <WriteLinesToFile File="$(ClientStylesheetHashFile)" Lines="$(ComputedClientStylesheetHash)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <Message Importance="high" Text="Recorded client stylesheet hash $(ComputedClientStylesheetHash) in $(ClientStylesheetHashFile)." />
   </Target>
 
 </Project>

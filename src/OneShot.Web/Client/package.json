@@ -7,7 +7,7 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --minify --format=iife --platform=browser --target=es2022 --legal-comments=none --outfile=../wwwroot/js/oneshot.js",
+    "build": "esbuild src/main.ts --bundle --minify --format=iife --platform=browser --target=es2022 --legal-comments=none --outfile=../wwwroot/js/oneshot.js && esbuild src/styles.css --bundle --minify --outfile=../wwwroot/css/oneshot.css",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm run test && npm run build"

@@ -103,6 +103,9 @@ test.describe('both pages can be driven by keyboard alone', () => {
     await page.selectOption('#ttl', '300');
 
     await page.keyboard.press('Tab');
+    await expect(page.locator('#splitKey')).toBeFocused();
+
+    await page.keyboard.press('Tab');
     await expect(page.locator('#create')).toBeFocused();
     await page.keyboard.press('Enter');
 

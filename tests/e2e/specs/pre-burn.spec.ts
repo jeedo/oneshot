@@ -77,19 +77,22 @@ test.describe('[T4] link scanners cannot pre-burn a secret', () => {
     expect((await (await request.get(`/api/secrets/${id}`)).json()).state).toBe('consumed');
   });
 
-  test('[T8] reloading after the fragment is stripped loses the key without burning the secret', async ({ page, request }) => {
+  test('[T8] reloading after the fragment is stripped prompts for the key again, without burning the secret', async ({ page, request }) => {
     const { link, id } = await createSecret(page, 'reload-loses-the-key');
 
     await page.goto(link);
     await expect(page.locator('#reveal')).toBeEnabled();
     expect(await page.evaluate(() => location.hash)).toBe('');
 
-    // The reload carries no fragment, because the page removed it from the address bar on first load.
+    // The reload carries no fragment, because the page removed it from the address bar on first load. The
+    // reveal page cannot tell that apart from a link whose key was withheld on purpose for split-channel
+    // delivery (issue #77), so it prompts for the key again instead of erroring — either way, the secret
+    // itself stays untouched until a valid key is actually supplied.
     await page.reload();
 
-    await expect(page.locator('#error')).toBeVisible();
+    await expect(page.locator('#keyEntry')).toBeVisible();
+    await expect(page.locator('#error')).toBeHidden();
     await expect(page.locator('#reveal')).toBeDisabled();
-    // The secret itself is untouched: the reader lost the key, nobody consumed anything.
     expect((await (await request.get(`/api/secrets/${id}`)).json()).state).toBe('available');
   });
 });

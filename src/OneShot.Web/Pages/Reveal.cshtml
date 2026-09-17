@@ -5,6 +5,13 @@
     <p id="expiry" hidden></p>
     <p id="error" role="alert" hidden></p>
     <p id="identity" hidden></p>
+    <div id="keyEntry" hidden>
+        <p>
+            <label for="manualKey">Key</label><br />
+            <input id="manualKey" type="text" size="50" autocomplete="off" spellcheck="false" autocapitalize="off" class="mono" />
+        </p>
+        <p>Enter the key the sender sent you separately. Reveal stays disabled until it is a complete, correctly-formed key &mdash; but a key that has the right shape and the wrong content will still consume the secret, since there is no way to check it without doing so.</p>
+    </div>
     <p>
         <button type="button" id="reveal" disabled>Reveal secret</button>
     </p>

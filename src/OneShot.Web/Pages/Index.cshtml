@@ -16,6 +16,12 @@
             <option value="86400">1 day</option>
             <option value="604800">7 days</option>
         </select>
+    </p>
+    <p>
+        <label class="checkbox-label"><input type="checkbox" id="splitKey" /> Send the key separately (advanced)</label><br />
+        <small>Produces a bare link with no key attached, plus a separate key, so you can send them over two different channels &mdash; for example the link by chat, the key by email. Sending both the same way defeats the point.</small>
+    </p>
+    <p>
         <button type="button" id="create">Create link</button>
     </p>
     <p id="error" role="alert" hidden></p>
@@ -25,6 +31,14 @@
             <input id="link" type="text" readonly size="80" autocomplete="off" />
             <button type="button" id="copy">Copy</button>
         </p>
+        <div id="keyField" hidden>
+            <p>
+                <label for="key">Key</label><br />
+                <input id="key" type="text" readonly size="50" autocomplete="off" class="mono" />
+                <button type="button" id="copyKey">Copy key</button>
+            </p>
+            <p>Send this key over a different channel than the link above.</p>
+        </div>
         <p>The link works exactly once. If the recipient reports it was already opened, treat the secret as compromised.</p>
     </div>
 </section>

@@ -1,4 +1,6 @@
 import { peekSecret, revealSecret, whoami } from './api';
+import { decode } from './base64url';
+import { KEY_BYTES } from './crypto';
 import { type RevealView, runReveal, runRevealLoad } from './revealFlow';
 
 const errors: Record<string, string> = {
@@ -28,7 +30,9 @@ export function initRevealPage(root: Document): void {
   const result = root.querySelector<HTMLElement>('#result');
   const plaintext = root.querySelector<HTMLPreElement>('#plaintext');
   const copy = root.querySelector<HTMLButtonElement>('#copy');
-  if (!status || !expiry || !identity || !error || !reveal || !result || !plaintext || !copy) {
+  const keyEntry = root.querySelector<HTMLElement>('#keyEntry');
+  const manualKey = root.querySelector<HTMLInputElement>('#manualKey');
+  if (!status || !expiry || !identity || !error || !reveal || !result || !plaintext || !copy || !keyEntry || !manualKey) {
     return;
   }
 
@@ -61,6 +65,10 @@ export function initRevealPage(root: Document): void {
       revealKey = key as Uint8Array<ArrayBuffer>;
       reveal.disabled = false;
     },
+    promptForKey: () => {
+      keyEntry.hidden = false;
+      manualKey.focus();
+    },
     setIdentity: (user) => {
       if (user) {
         identity.textContent = `Signed in as ${user}.`;
@@ -92,6 +100,22 @@ export function initRevealPage(root: Document): void {
 
   copy.addEventListener('click', () => {
     void navigator.clipboard.writeText(plaintext.textContent ?? '');
+  });
+
+  // Same gate the fragment path already enforces (T4, issue #77): Reveal stays disabled until the manually
+  // entered key decodes to exactly 32 bytes, so a click here is exactly as guaranteed to carry a
+  // syntactically valid key as a click driven by a fragment ever was — a shorter or malformed key cannot
+  // reach POST /reveal and consume the secret before it has the right shape.
+  manualKey.addEventListener('input', () => {
+    let key: Uint8Array | null = null;
+    try {
+      const decoded = decode(manualKey.value.trim());
+      key = decoded.length === KEY_BYTES ? decoded : null;
+    } catch {
+      key = null;
+    }
+    revealKey = key as Uint8Array<ArrayBuffer> | null;
+    reveal.disabled = key === null;
   });
 
   void runRevealLoad(view, {

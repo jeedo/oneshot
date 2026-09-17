@@ -109,6 +109,29 @@ select {
   width: auto;
 }
 
+.mono {
+  font-family: var(--font-mono);
+}
+
+input[type='checkbox'] {
+  width: auto;
+  margin-right: var(--space-1);
+  vertical-align: middle;
+}
+
+.checkbox-label {
+  font-weight: normal;
+  display: inline-flex;
+  align-items: center;
+}
+
+small {
+  display: block;
+  color: var(--fg-muted);
+  font-size: 13px;
+  margin-top: var(--space-1);
+}
+
 button {
   display: inline-block;
   padding: var(--space-1) var(--space-3);

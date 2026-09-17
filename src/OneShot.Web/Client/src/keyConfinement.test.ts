@@ -113,6 +113,7 @@ describe('[T9] the key never reaches fetch', () => {
     const view: CreateView = {
       readSecret: () => plaintext,
       ttlSeconds: () => 900,
+      splitKey: () => false,
       clearSecret: () => undefined,
       showLink: (value) => {
         link = value;
@@ -130,6 +131,32 @@ describe('[T9] the key never reaches fetch', () => {
     const fragment = link.slice(link.indexOf('#') + 1);
     expect(fragment).toHaveLength(43);
     assertConfined(sent, decode(fragment), plaintext);
+  });
+
+  // Issue #77: the split-channel opt-in changes only what the create page displays, never what reaches the
+  // server. The key here comes back to the test via showLink's own second argument rather than a link fragment.
+  it('the split-channel create flow leaks no key to fetch either', async () => {
+    const plaintext = 'CANARY-SPLIT-4f1a';
+    let shownKey = '';
+    const view: CreateView = {
+      readSecret: () => plaintext,
+      ttlSeconds: () => 900,
+      splitKey: () => true,
+      clearSecret: () => undefined,
+      showLink: (_value, key) => {
+        shownKey = key ?? '';
+      },
+      showError: (code) => expect.unreachable(`create failed: ${code}`),
+    };
+    const { fetchFn, sent } = spyFetch(() => json(201, { id: 'abcdefghijklmnopqrstuA', expiresAt: '2026-09-12T13:00:00Z' }));
+
+    await runCreate(view, {
+      origin: 'https://oneshot.example',
+      api: (ciphertext, nonce, ttlSeconds) => createSecret(ciphertext, nonce, ttlSeconds, fetchFn),
+    });
+
+    expect(shownKey).toHaveLength(43);
+    assertConfined(sent, decode(shownKey), plaintext);
   });
 
   it('the sweep catches a key that is smuggled out', async () => {

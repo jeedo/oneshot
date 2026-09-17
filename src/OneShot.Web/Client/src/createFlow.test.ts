@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ApiError, type CreatedSecret } from './api';
 import { decode } from './base64url';
-import { MAX_PLAINTEXT_BYTES } from './crypto';
+import { MAX_PLAINTEXT_BYTES, decrypt } from './crypto';
 import { type CreateView, runCreate } from './createFlow';
 
 interface Call {
@@ -11,17 +11,18 @@ interface Call {
   ttlSeconds: number;
 }
 
-function view(secret: string, ttlSeconds = 3600) {
+function view(secret: string, ttlSeconds = 3600, splitKey = false) {
   const events: string[] = [];
   let current = secret;
   const v: CreateView = {
     readSecret: () => current,
     ttlSeconds: () => ttlSeconds,
+    splitKey: () => splitKey,
     clearSecret: () => {
       current = '';
       events.push('clear');
     },
-    showLink: (link) => events.push(`link:${link}`),
+    showLink: (link, key) => events.push(`link:${link}|${key ?? ''}`),
     showError: (code) => events.push(`error:${code}`),
   };
   return { v, events, secret: () => current };
@@ -51,7 +52,7 @@ describe('[T1] create flow', () => {
     expect(calls[0]!.nonce).toHaveLength(12);
     expect(calls[0]!.ttlSeconds).toBe(900);
     expect(events).toHaveLength(2);
-    expect(events[0]).toMatch(/^link:https:\/\/oneshot\.example\/s\/abcdefghijklmnopqrstuA#[A-Za-z0-9_-]{43}$/);
+    expect(events[0]).toMatch(/^link:https:\/\/oneshot\.example\/s\/abcdefghijklmnopqrstuA#[A-Za-z0-9_-]{43}\|$/);
     expect(events[1]).toBe('clear');
     expect(secret()).toBe('');
   });
@@ -62,7 +63,8 @@ describe('[T1] create flow', () => {
 
     await runCreate(v, { origin: 'https://oneshot.example', api: fn });
 
-    const fragment = events[0]!.slice(events[0]!.indexOf('#') + 1);
+    const link = events[0]!.slice('link:'.length, events[0]!.indexOf('|'));
+    const fragment = link.slice(link.indexOf('#') + 1);
     const key = decode(fragment);
     const request = JSON.stringify({ c: Array.from(calls[0]!.ciphertext), n: Array.from(calls[0]!.nonce), t: calls[0]!.ttlSeconds });
     expect(request).not.toContain(fragment);
@@ -107,5 +109,38 @@ describe('[T1] create flow', () => {
     await runCreate(v, { origin: 'https://h', api: fn });
 
     expect(events).toEqual(['error:failed']);
+  });
+});
+
+// Issue #77: the opt-in that withholds the key from the link for split-channel delivery. Nothing about the
+// server request changes — only what the create page is handed to display.
+describe('[T1] create flow — split-channel key', () => {
+  it('shows a bare link and the raw key separately, and the key still decrypts the ciphertext that was sent', async () => {
+    const { v, events, secret } = view('my password', 900, true);
+    const { fn, calls } = api({ id: 'abcdefghijklmnopqrstuA', expiresAt: '2026-09-12T13:00:00Z' });
+
+    await runCreate(v, { origin: 'https://oneshot.example', api: fn });
+
+    expect(events).toHaveLength(2);
+    const [, link, key] = events[0]!.match(/^link:(.*)\|(.*)$/) ?? [];
+    expect(link).toBe('https://oneshot.example/s/abcdefghijklmnopqrstuA');
+    expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    const rawKey = decode(key!);
+    const plaintext = await decrypt(calls[0]!.ciphertext as Uint8Array<ArrayBuffer>, rawKey, calls[0]!.nonce as Uint8Array<ArrayBuffer>);
+    expect(new TextDecoder().decode(plaintext)).toBe('my password');
+    expect(events[1]).toBe('clear');
+    expect(secret()).toBe('');
+  });
+
+  it('never posts the key, split or not', async () => {
+    const { v, events } = view('my password', 3600, true);
+    const { fn, calls } = api({ id: 'abcdefghijklmnopqrstuA', expiresAt: '2026-09-12T13:00:00Z' });
+
+    await runCreate(v, { origin: 'https://oneshot.example', api: fn });
+
+    const key = events[0]!.slice(events[0]!.lastIndexOf('|') + 1);
+    const request = JSON.stringify({ c: Array.from(calls[0]!.ciphertext), n: Array.from(calls[0]!.nonce) });
+    expect(request).not.toContain(key);
   });
 });

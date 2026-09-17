@@ -9,6 +9,9 @@ export interface RevealView {
   showState(state: SecretState, expiresAt: string | null): void;
   showError(code: string): void;
   enableReveal(key: Uint8Array): void;
+  // Issue #77: called instead of enableReveal when the link carries no fragment at all (the sender withheld
+  // the key on purpose) and the secret is still available — the view shows a manual key-entry field.
+  promptForKey(): void;
   setIdentity(user: string | null): void;
   disableReveal(): void;
   showSecret(plaintext: string): void;
@@ -29,11 +32,17 @@ export interface RevealDeps {
 
 // The fragment is validated and dropped from the address bar before anything touches the network, so a bad
 // link never reaches the server and the key never survives in browser history (T8).
+//
+// Issue #77: an empty fragment means no key was ever attached to the link (a split-channel share, on purpose)
+// and is not the same failure as a fragment that is present but malformed — that keeps today's invalidKey
+// error exactly as before. An empty fragment instead proceeds like a normal load and, only once the secret is
+// confirmed available, prompts for the key to be entered separately rather than enabling Reveal outright.
 export async function runRevealLoad(view: RevealView, deps: RevealDeps): Promise<void> {
-  const key = decodeExactly(deps.fragment, KEY_BYTES);
+  const hasFragment = deps.fragment.length > 0;
+  const key = hasFragment ? decodeExactly(deps.fragment, KEY_BYTES) : null;
   view.stripFragment();
 
-  if (!key) {
+  if (hasFragment && !key) {
     view.showError('invalidKey');
     return;
   }
@@ -49,7 +58,11 @@ export async function runRevealLoad(view: RevealView, deps: RevealDeps): Promise
     const peek = await deps.peek(deps.id);
     view.showState(peek.state, peek.expiresAt);
     if (peek.state === 'available') {
-      view.enableReveal(key);
+      if (key) {
+        view.enableReveal(key);
+      } else {
+        view.promptForKey();
+      }
     }
   } catch (error) {
     view.showError(error instanceof ApiError ? error.code : 'failed');

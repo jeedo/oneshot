@@ -12,12 +12,16 @@ const messages: Record<string, string> = {
 export function initCreatePage(root: Document): void {
   const secret = root.querySelector<HTMLTextAreaElement>('#secret');
   const ttl = root.querySelector<HTMLSelectElement>('#ttl');
+  const splitKey = root.querySelector<HTMLInputElement>('#splitKey');
   const create = root.querySelector<HTMLButtonElement>('#create');
   const error = root.querySelector<HTMLElement>('#error');
   const result = root.querySelector<HTMLElement>('#result');
   const link = root.querySelector<HTMLInputElement>('#link');
   const copy = root.querySelector<HTMLButtonElement>('#copy');
-  if (!secret || !ttl || !create || !error || !result || !link || !copy) {
+  const keyField = root.querySelector<HTMLElement>('#keyField');
+  const key = root.querySelector<HTMLInputElement>('#key');
+  const copyKey = root.querySelector<HTMLButtonElement>('#copyKey');
+  if (!secret || !ttl || !splitKey || !create || !error || !result || !link || !copy || !keyField || !key || !copyKey) {
     return;
   }
 
@@ -36,11 +40,19 @@ export function initCreatePage(root: Document): void {
   const view: CreateView = {
     readSecret: () => secret.value,
     ttlSeconds: () => Number.parseInt(ttl.value, 10),
+    splitKey: () => splitKey.checked,
     clearSecret: () => {
       secret.value = '';
     },
-    showLink: (url) => {
+    showLink: (url, shownKey) => {
       link.value = url;
+      if (shownKey !== null) {
+        key.value = shownKey;
+        keyField.hidden = false;
+      } else {
+        key.value = '';
+        keyField.hidden = true;
+      }
       error.hidden = true;
       result.hidden = false;
       link.focus();
@@ -58,5 +70,9 @@ export function initCreatePage(root: Document): void {
 
   copy.addEventListener('click', () => {
     void navigator.clipboard.writeText(link.value);
+  });
+
+  copyKey.addEventListener('click', () => {
+    void navigator.clipboard.writeText(key.value);
   });
 }

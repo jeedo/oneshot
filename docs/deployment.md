@@ -147,6 +147,17 @@ fails the same way any other OOM condition would (the container or worker proces
 which is a routine restart for a store with no persistence to lose (see "No Persistence Layer"), not a
 security incident — but it is worth choosing deliberately rather than discovering it under load.
 
+## Feature Flags
+
+`FeatureOptions` (`src/OneShot.Web/FeatureOptions.cs`) holds the one feature currently gated deployment-wide:
+`SplitKeyDelivery` (default **on**), the opt-in on the create page that withholds the key from the link for
+delivery over a second channel (issue #77, plan task 57). Turn it off under the `Features` section
+(`Features__SplitKeyDelivery=false`) to remove the option — and the reveal page's matching manual key-entry
+prompt — from every page, deployment-wide, if a deployment would rather keep the single-link flow as the only
+one available (for example, a policy against manual key transcription). This is a UI toggle, not a security
+control: `T1` ("the server never sees the key") holds identically whether the flag is on or off, since the key
+never leaves the browser via either path.
+
 ## No Persistence Layer
 
 This is a standing rule, not a per-deployment choice: **no database, cache, file, or Data Protection key ring

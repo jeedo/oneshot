@@ -30,11 +30,15 @@ export function initRevealPage(root: Document): void {
   const result = root.querySelector<HTMLElement>('#result');
   const plaintext = root.querySelector<HTMLPreElement>('#plaintext');
   const copy = root.querySelector<HTMLButtonElement>('#copy');
-  const keyEntry = root.querySelector<HTMLElement>('#keyEntry');
-  const manualKey = root.querySelector<HTMLInputElement>('#manualKey');
-  if (!status || !expiry || !identity || !error || !reveal || !result || !plaintext || !copy || !keyEntry || !manualKey) {
+  if (!status || !expiry || !identity || !error || !reveal || !result || !plaintext || !copy) {
     return;
   }
+
+  // Issue #77's manual key entry is gated behind an operator flag (Features:SplitKeyDelivery, task 57 follow
+  // up) checked at startup, so both elements together may legitimately be absent from the page.
+  const keyEntryElement = root.querySelector<HTMLElement>('#keyEntry');
+  const manualKeyElement = root.querySelector<HTMLInputElement>('#manualKey');
+  const keyEntry = keyEntryElement && manualKeyElement ? { field: keyEntryElement, input: manualKeyElement } : null;
 
   const showError = (code: string): void => {
     error.textContent = errors[code] ?? errors['failed']!;
@@ -66,8 +70,14 @@ export function initRevealPage(root: Document): void {
       reveal.disabled = false;
     },
     promptForKey: () => {
-      keyEntry.hidden = false;
-      manualKey.focus();
+      if (keyEntry) {
+        keyEntry.field.hidden = false;
+        keyEntry.input.focus();
+      } else {
+        // The feature is off deployment-wide, so a link with no fragment falls back to exactly the
+        // pre-#77 behavior: the same error a malformed fragment already gets.
+        showError('invalidKey');
+      }
     },
     setIdentity: (user) => {
       if (user) {
@@ -106,10 +116,10 @@ export function initRevealPage(root: Document): void {
   // entered key decodes to exactly 32 bytes, so a click here is exactly as guaranteed to carry a
   // syntactically valid key as a click driven by a fragment ever was — a shorter or malformed key cannot
   // reach POST /reveal and consume the secret before it has the right shape.
-  manualKey.addEventListener('input', () => {
+  keyEntry?.input.addEventListener('input', () => {
     let key: Uint8Array | null = null;
     try {
-      const decoded = decode(manualKey.value.trim());
+      const decoded = decode(keyEntry.input.value.trim());
       key = decoded.length === KEY_BYTES ? decoded : null;
     } catch {
       key = null;

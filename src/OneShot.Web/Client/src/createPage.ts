@@ -9,21 +9,37 @@ const messages: Record<string, string> = {
   failed: 'The link could not be created. Try again.',
 };
 
+interface SplitKeyElements {
+  checkbox: HTMLInputElement;
+  field: HTMLElement;
+  value: HTMLInputElement;
+  copyButton: HTMLButtonElement;
+}
+
+// Issue #77's split-channel option is gated behind an operator flag (Features:SplitKeyDelivery, task 57 follow
+// up) checked at startup, so its markup — all four elements together, or none of them — may legitimately be
+// absent from the page. Nothing else on this page depends on it.
+function findSplitKeyElements(root: Document): SplitKeyElements | null {
+  const checkbox = root.querySelector<HTMLInputElement>('#splitKey');
+  const field = root.querySelector<HTMLElement>('#keyField');
+  const value = root.querySelector<HTMLInputElement>('#key');
+  const copyButton = root.querySelector<HTMLButtonElement>('#copyKey');
+  return checkbox && field && value && copyButton ? { checkbox, field, value, copyButton } : null;
+}
+
 export function initCreatePage(root: Document): void {
   const secret = root.querySelector<HTMLTextAreaElement>('#secret');
   const ttl = root.querySelector<HTMLSelectElement>('#ttl');
-  const splitKey = root.querySelector<HTMLInputElement>('#splitKey');
   const create = root.querySelector<HTMLButtonElement>('#create');
   const error = root.querySelector<HTMLElement>('#error');
   const result = root.querySelector<HTMLElement>('#result');
   const link = root.querySelector<HTMLInputElement>('#link');
   const copy = root.querySelector<HTMLButtonElement>('#copy');
-  const keyField = root.querySelector<HTMLElement>('#keyField');
-  const key = root.querySelector<HTMLInputElement>('#key');
-  const copyKey = root.querySelector<HTMLButtonElement>('#copyKey');
-  if (!secret || !ttl || !splitKey || !create || !error || !result || !link || !copy || !keyField || !key || !copyKey) {
+  if (!secret || !ttl || !create || !error || !result || !link || !copy) {
     return;
   }
+
+  const splitKey = findSplitKeyElements(root);
 
   const showError = (code: string): void => {
     error.textContent = messages[code] ?? messages['failed']!;
@@ -40,18 +56,20 @@ export function initCreatePage(root: Document): void {
   const view: CreateView = {
     readSecret: () => secret.value,
     ttlSeconds: () => Number.parseInt(ttl.value, 10),
-    splitKey: () => splitKey.checked,
+    splitKey: () => splitKey?.checkbox.checked ?? false,
     clearSecret: () => {
       secret.value = '';
     },
     showLink: (url, shownKey) => {
       link.value = url;
-      if (shownKey !== null) {
-        key.value = shownKey;
-        keyField.hidden = false;
-      } else {
-        key.value = '';
-        keyField.hidden = true;
+      if (splitKey) {
+        if (shownKey !== null) {
+          splitKey.value.value = shownKey;
+          splitKey.field.hidden = false;
+        } else {
+          splitKey.value.value = '';
+          splitKey.field.hidden = true;
+        }
       }
       error.hidden = true;
       result.hidden = false;
@@ -72,7 +90,7 @@ export function initCreatePage(root: Document): void {
     void navigator.clipboard.writeText(link.value);
   });
 
-  copyKey.addEventListener('click', () => {
-    void navigator.clipboard.writeText(key.value);
+  splitKey?.copyButton.addEventListener('click', () => {
+    void navigator.clipboard.writeText(splitKey.value.value);
   });
 }

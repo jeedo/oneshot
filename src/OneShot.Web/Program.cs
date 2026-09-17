@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 
+using OneShot.Web;
 using OneShot.Web.Api;
 using OneShot.Web.Audit;
 using OneShot.Web.Secrets;
@@ -34,6 +35,7 @@ builder.Services.AddHostedService(provider => new ExpirySweeperService(
 builder.Services.AddSingleton<AuditLogger>();
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection("RateLimiting"));
 builder.Services.AddOneShotRateLimiting();
+builder.Services.Configure<FeatureOptions>(builder.Configuration.GetSection("Features"));
 builder.Services.AddStartupValidation();
 
 builder.Services.AddAuthentication(IdentityCookie.Scheme)

@@ -1,0 +1,173 @@
+/* Default styling (plan task, issue #80). A small hand-authored stylesheet using GitHub Primer's token
+   *values* and *conventions* — not the Primer package itself, which would be a runtime dependency this
+   client deliberately has none of. Light/dark is prefers-color-scheme only; no JS theme switcher. */
+
+:root {
+  color-scheme: light dark;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+
+  --radius: 6px;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  --font-mono:
+    ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+
+  --fg-default: #1f2328;
+  --fg-muted: #59636e;
+  --bg-default: #ffffff;
+  --bg-subtle: #f6f8fa;
+  --border-default: #d1d9e0;
+  --accent-emphasis: #0969da;
+  --accent-fg-on-emphasis: #ffffff;
+  --danger-fg: #d1242f;
+  --danger-bg: #ffebe9;
+  --danger-border: #ff8182;
+  --focus-outline: #0969da;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg-default: #e6edf3;
+    --fg-muted: #9198a1;
+    --bg-default: #0d1117;
+    --bg-subtle: #151b23;
+    --border-default: #3d444d;
+    --accent-emphasis: #1f6feb;
+    --accent-fg-on-emphasis: #ffffff;
+    --danger-fg: #ff6a69;
+    --danger-bg: #2e0f0f;
+    --danger-border: #ff6a69;
+    --focus-outline: #4493f8;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: var(--space-5) var(--space-3);
+  background: var(--bg-default);
+  color: var(--fg-default);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 24px;
+  margin: 0 0 var(--space-2);
+}
+
+p {
+  margin: 0 0 var(--space-3);
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+
+textarea,
+select,
+input[type='text'] {
+  width: 100%;
+  padding: var(--space-2);
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--fg-default);
+  background: var(--bg-default);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 8em;
+}
+
+input[readonly] {
+  background: var(--bg-subtle);
+}
+
+select {
+  width: auto;
+}
+
+button {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  margin-top: var(--space-2);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent-fg-on-emphasis);
+  background: var(--accent-emphasis);
+  border: 1px solid var(--accent-emphasis);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-outline);
+  outline-offset: 2px;
+}
+
+[role='alert'] {
+  padding: var(--space-2) var(--space-3);
+  color: var(--danger-fg);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius);
+}
+
+[role='status'],
+#identity,
+#warning {
+  color: var(--fg-muted);
+  font-size: 14px;
+}
+
+pre {
+  padding: var(--space-3);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+}
+
+#result {
+  padding: var(--space-3);
+  margin-top: var(--space-3);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+}

@@ -180,7 +180,7 @@ Each table lists the threats that apply to the component, the register ID, and w
 | T4 | Pre-burn by scanners; CSRF on reveal | 17, 18, 22 | 31, 32 |
 | T5 | Secret material reaching disk | 5, 6, 12, 14, 48, 50 | 28, 35 |
 | T6 | DoS / memory exhaustion | 5, 13, 14, 16 | 39 |
-| T7 | XSS via content; tampered bundle | 3, 4, 23 | 33, 34 |
+| T7 | XSS via content; tampered bundle | 3, 4, 23, 56 | 33, 34 |
 | T8 | Transport / browser leakage | 4, 22, 55 | 33, 42 |
 | T9 | Cryptographic weakness | 9, 21, 23 | 36, 37 |
 | T10 | Forged audit identity; PII | 15, 19, 51 | 40 |

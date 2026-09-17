@@ -46,11 +46,23 @@ accepts — including the big one: **anyone who sees the link can read the secre
 
 ## Running it
 
+There is no `Properties/launchSettings.json` ([#78](https://github.com/jeedo/oneshot/issues/78)), so a bare
+`dotnet run` starts in `Production`, not `Development` — set the environment explicitly for local work.
+
+### Development
+
 ```bash
-dotnet run --project src/OneShot.Web       # http://localhost:5000
+ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/OneShot.Web   # http://localhost:5000
 ```
 
-Or the container, in the shape it is meant to run in:
+`Development` is the only environment where `DeploymentValidator` (below) is skipped, so this is the form to
+use for anything beyond the bare default — testing from another device on the same network, passing `--urls`,
+or reproducing a deployment scenario locally.
+
+### Production
+
+The shape it's actually meant to run in — TLS terminated in front of it, or served directly over HTTPS. The
+container, with the same flags [`docs/deployment.md`](docs/deployment.md) documents in full:
 
 ```bash
 docker build -f Containerfile -t oneshot .
@@ -58,10 +70,15 @@ docker run --read-only --tmpfs /tmp -p 8080:8080 \
   -e ForwardedHeaders__KnownProxies__0=127.0.0.1 oneshot
 ```
 
-Outside `Development`, if the addresses it is told to bind are plain HTTP and no trusted proxy is declared,
-the host refuses to start rather than serving secrets in the clear — try
-`dotnet run --project src/OneShot.Web --urls http://localhost:5055` to see it. The log line names the
-condition that failed.
+Outside `Development`, `DeploymentValidator` refuses to start the host at all if the deployment is unsafe —
+most commonly because only plain-HTTP addresses are configured with no trusted proxy declared. To see the
+refusal itself:
+
+```bash
+dotnet run --project src/OneShot.Web --urls http://localhost:5055
+```
+
+The log line names the exact condition that failed.
 
 ## Verifying a release
 

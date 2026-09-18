@@ -109,6 +109,10 @@ select {
   width: auto;
 }
 
+.mono {
+  font-family: var(--font-mono);
+}
+
 button {
   display: inline-block;
   padding: var(--space-1) var(--space-3);

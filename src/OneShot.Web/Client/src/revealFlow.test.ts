@@ -17,6 +17,7 @@ function harness() {
       enabledKey = key;
       events.push('enable');
     },
+    promptForKey: () => events.push('promptForKey'),
     setIdentity: (user) => events.push(`identity:${user ?? 'anonymous'}`),
     disableReveal: () => events.push('disable'),
     showSecret: (plaintext) => events.push(`secret:${plaintext}`),
@@ -54,7 +55,6 @@ describe('[T8] reveal page load', () => {
   });
 
   it.each([
-    ['empty', ''],
     ['too short', encode(new Uint8Array(31))],
     ['too long', encode(new Uint8Array(33))],
     ['not base64url', '!!!!'],
@@ -148,5 +148,52 @@ describe('[T8] reveal page load', () => {
     await runRevealLoad(view, d);
 
     expect(events).toContain('error:failed');
+  });
+});
+
+// Issue #77: a link with no fragment at all is not the same as a link with a malformed one. The former means
+// the sender withheld the key on purpose and it is coming by another channel, so the recipient should be
+// prompted to enter it — not shown the "this link is incomplete" error the malformed cases above still get.
+describe('[T8] reveal page load — withheld key (split-channel delivery)', () => {
+  it('an empty fragment on an available secret prompts for the key instead of erroring, and never enables reveal on its own', async () => {
+    const { view, events, key } = harness();
+    const { deps: d, peek, whoami } = deps({ fragment: '' });
+
+    await runRevealLoad(view, d);
+
+    expect(events).toEqual(['strip', 'identity:anonymous', 'state:available:2026-09-12T13:00:00Z', 'promptForKey']);
+    expect(peek).toHaveBeenCalledWith(ID);
+    expect(whoami).toHaveBeenCalledOnce();
+    expect(key()).toBeNull();
+  });
+
+  it('an empty fragment on an already-consumed secret shows the state and does not prompt for a key', async () => {
+    const { view, events } = harness();
+    const { deps: d } = deps({ fragment: '', peek: async () => ({ state: 'consumed', expiresAt: '2026-09-12T13:00:00Z' }) });
+
+    await runRevealLoad(view, d);
+
+    expect(events).toEqual(['strip', 'identity:anonymous', 'state:consumed:2026-09-12T13:00:00Z']);
+    expect(events).not.toContain('promptForKey');
+  });
+
+  it('an empty fragment on an unknown secret shows the state and does not prompt for a key', async () => {
+    const { view, events } = harness();
+    const { deps: d } = deps({ fragment: '', peek: async () => ({ state: 'unknown', expiresAt: null }) });
+
+    await runRevealLoad(view, d);
+
+    expect(events).toEqual(['strip', 'identity:anonymous', 'state:unknown:']);
+    expect(events).not.toContain('promptForKey');
+  });
+
+  it('a malformed id still wins over an empty fragment, with no network call', async () => {
+    const { view, events } = harness();
+    const { deps: d, peek } = deps({ id: 'abcdefghijklmnopqrstuB', fragment: '' });
+
+    await runRevealLoad(view, d);
+
+    expect(events).toEqual(['strip', 'error:invalidLink']);
+    expect(peek).not.toHaveBeenCalled();
   });
 });

@@ -174,15 +174,15 @@ Each table lists the threats that apply to the component, the register ID, and w
 
 | ID | Threat | Mitigation tasks | Test tasks |
 |----|--------|------------------|------------|
-| T1 | Server-side exposure of plaintext or key | 6, 8, 15, 21 | 35, 36 |
+| T1 | Server-side exposure of plaintext or key | 6, 8, 15, 21, 57 | 35, 36 |
 | T2 | Double-read race | 11, 12, 18 | 27, 28 |
 | T3 | Id enumeration / brute force | 9, 20 | 29 |
 | T4 | Pre-burn by scanners; CSRF on reveal | 17, 18, 22 | 31, 32 |
 | T5 | Secret material reaching disk | 5, 6, 12, 14, 48, 50 | 28, 35 |
 | T6 | DoS / memory exhaustion | 5, 13, 14, 16 | 39 |
 | T7 | XSS via content; tampered bundle | 3, 4, 23, 56 | 33, 34 |
-| T8 | Transport / browser leakage | 4, 22, 55 | 33, 42 |
-| T9 | Cryptographic weakness | 9, 21, 23 | 36, 37 |
+| T8 | Transport / browser leakage | 4, 22, 55, 57 | 33, 42 |
+| T9 | Cryptographic weakness | 9, 21, 23, 57 | 36, 37 |
 | T10 | Forged audit identity; PII | 15, 19, 51 | 40 |
 | T11 | Rate-limit bypass via proxy headers | 20 | 30 |
 | T12 | Malformed input / parser abuse | 10, 16 | 38 |
@@ -194,7 +194,7 @@ Each table lists the threats that apply to the component, the register ID, and w
 
 | Risk | Why it remains | Compensating control |
 |------|----------------|----------------------|
-| **Anyone who sees the share link can reveal the secret** | The link *is* the credential; the channel (B2) is outside the system | Exactly-once consumption plus a tombstone, so the intended recipient learns the secret was taken and treats it as compromised |
+| **Anyone who sees the share link can reveal the secret** | The link *is* the credential; the channel (B2) is outside the system | Exactly-once consumption plus a tombstone, so the intended recipient learns the secret was taken and treats it as compromised. Task 57 (issue #77) offers a deployment-wide default (`Features:SplitKeyDelivery`, not a per-secret choice) that withholds the key from the link for delivery over a second channel — a single compromised channel is then no longer sufficient — but this is only partial: it depends on the two channels actually being independent, and a key re-entered by hand is more error-prone than one carried in a copy-pasted link, so a wrong-but-well-formed key still consumes the secret before decryption fails |
 | **Compromised endpoint (sharer's or recipient's device, browser extension)** | The browser must hold A1 and A2 to do its job | Plaintext and key references dropped as soon as possible; no client-side persistence |
 | **Purpose-built scanner that executes JS and clicks Reveal** | Indistinguishable from a human | Same tombstone tamper evidence; documented in the runbook |
 | **Server memory scraping, swap, or core dumps expose ciphertext** | Process memory is not under the app's control | Ciphertext is useless without `K`; buffers zeroed promptly; hardened container, no volumes; TTL bounds exposure |

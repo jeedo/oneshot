@@ -14,6 +14,7 @@ function harness() {
     showState: (state) => events.push(`state:${state}`),
     showError: (code) => events.push(`error:${code}`),
     enableReveal: () => events.push('enable'),
+    promptForKey: () => events.push('promptForKey'),
     setIdentity: () => events.push('identity'),
     disableReveal: () => events.push('disable'),
     showSecret: (plaintext) => events.push(`secret:${plaintext}`),

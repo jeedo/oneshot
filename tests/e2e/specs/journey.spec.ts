@@ -1,7 +1,7 @@
 import { type Page, expect, test } from '@playwright/test';
 
 import { baseURL } from '../playwright.config';
-import { createSecret, openRevealPage, revealSecret } from '../support/oneshot';
+import { createSecret, openRevealPage, requireClassicLink, revealSecret } from '../support/oneshot';
 
 // The whole journey a real pair of people take, end to end, plus the three ways it can end badly and the
 // keyboard path through both pages. The individual mitigations are covered elsewhere; this is the check that
@@ -14,6 +14,9 @@ async function readClipboard(page: Page): Promise<string> {
 
 test.describe('[T2] [T8] the journey from sharer to recipient', () => {
   test('create, copy the link, open it elsewhere, reveal, and the second visit says so', async ({ page, browser }) => {
+    // Split-channel delivery's own version of this end-to-end journey lives in split-key.spec.ts; this one is
+    // about the classic fragment-carrying link, down to the exact regex the copied link must match.
+    requireClassicLink();
     // The sharer needs clipboard write for the copy button; the recipient context gets none of it.
     const sharer = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
     const sharerPage = await sharer.newPage();
@@ -59,6 +62,9 @@ test.describe('[T2] [T8] the journey from sharer to recipient', () => {
   });
 
   test('a link whose secret is not there reads as unknown', async ({ page }) => {
+    // Reuses a real fragment on a fake id, so it needs one to exist; split-key.spec.ts covers the equivalent
+    // unknown-id case for a bare link.
+    requireClassicLink();
     // An expired secret and one that never existed are the same state by design (task 12), and the store
     // proves the expiry half in process — the minimum TTL is 60 seconds, which is not a thing to wait for in
     // a browser suite. What is checked here is that the state reaches the reader as a plain sentence.
@@ -72,6 +78,8 @@ test.describe('[T2] [T8] the journey from sharer to recipient', () => {
   });
 
   test('a truncated link is refused before the network, and the secret stays sealed', async ({ page, request }) => {
+    // Truncates the link's own fragment; split-key.spec.ts covers the equivalent truncated-manual-key case.
+    requireClassicLink();
     const { link, id, fragment } = await createSecret(page, 'truncated-link-target');
 
     await page.goto(link.replace(`#${fragment}`, `#${fragment.slice(0, -4)}`));
@@ -115,11 +123,11 @@ test.describe('both pages can be driven by keyboard alone', () => {
   });
 
   test('the reveal page: tab to Reveal, press it, and reach the revealed text', async ({ page, browser }) => {
-    const { link } = await createSecret(page, 'keyboard-reveal');
+    const { link, key } = await createSecret(page, 'keyboard-reveal');
 
     const recipient = await browser.newContext();
     const recipientPage = await recipient.newPage();
-    await openRevealPage(recipientPage, link);
+    await openRevealPage(recipientPage, link, key);
     await expect(recipientPage.locator('#reveal')).toBeEnabled();
 
     await recipientPage.keyboard.press('Tab');
@@ -144,10 +152,10 @@ test.describe('both pages can be driven by keyboard alone', () => {
     await expect(page.getByLabel('Expires after')).toHaveId('ttl');
     await expect(page.locator('#error')).toHaveAttribute('role', 'alert');
 
-    const { link } = await createSecret(page, 'labels');
+    const { link, key } = await createSecret(page, 'labels');
     const recipient = await browser.newContext();
     const recipientPage = await recipient.newPage();
-    await openRevealPage(recipientPage, link);
+    await openRevealPage(recipientPage, link, key);
 
     // The status is what changes without the reader doing anything, so it has to be announced.
     await expect(recipientPage.locator('#status')).toHaveAttribute('role', 'status');

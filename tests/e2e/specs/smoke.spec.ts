@@ -13,12 +13,12 @@ test.describe('harness smoke', () => {
   test('a secret survives the full create, share and reveal round trip', async ({ page, context }) => {
     const secret = 'harness-round-trip — ünïcödé ✓';
 
-    const { link } = await createSecret(page, secret, 900);
+    const { link, key } = await createSecret(page, secret, 900);
 
     // A fresh context stands in for the recipient: no shared state with the sharer's page.
     const recipient = await context.browser()!.newContext();
     const recipientPage = await recipient.newPage();
-    await openRevealPage(recipientPage, link);
+    await openRevealPage(recipientPage, link, key);
 
     expect(await revealSecret(recipientPage)).toBe(secret);
     await recipient.close();

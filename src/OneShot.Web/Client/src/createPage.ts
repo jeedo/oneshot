@@ -9,22 +9,21 @@ const messages: Record<string, string> = {
   failed: 'The link could not be created. Try again.',
 };
 
-interface SplitKeyElements {
-  checkbox: HTMLInputElement;
+interface KeyFieldElements {
   field: HTMLElement;
   value: HTMLInputElement;
   copyButton: HTMLButtonElement;
 }
 
-// Issue #77's split-channel option is gated behind an operator flag (Features:SplitKeyDelivery, task 57 follow
-// up) checked at startup, so its markup — all four elements together, or none of them — may legitimately be
-// absent from the page. Nothing else on this page depends on it.
-function findSplitKeyElements(root: Document): SplitKeyElements | null {
-  const checkbox = root.querySelector<HTMLInputElement>('#splitKey');
+// Issue #77's split-channel key delivery is a deployment-wide default (Features:SplitKeyDelivery, task 57),
+// not a per-secret choice, so this markup — all three elements together, or none of them — may legitimately
+// be absent from the page. Its presence is also the page's only signal that the deployment wants every secret
+// created here to withhold the key from the link; there is no separate UI opt-in any more.
+function findKeyFieldElements(root: Document): KeyFieldElements | null {
   const field = root.querySelector<HTMLElement>('#keyField');
   const value = root.querySelector<HTMLInputElement>('#key');
   const copyButton = root.querySelector<HTMLButtonElement>('#copyKey');
-  return checkbox && field && value && copyButton ? { checkbox, field, value, copyButton } : null;
+  return field && value && copyButton ? { field, value, copyButton } : null;
 }
 
 export function initCreatePage(root: Document): void {
@@ -39,7 +38,7 @@ export function initCreatePage(root: Document): void {
     return;
   }
 
-  const splitKey = findSplitKeyElements(root);
+  const keyField = findKeyFieldElements(root);
 
   const showError = (code: string): void => {
     error.textContent = messages[code] ?? messages['failed']!;
@@ -56,20 +55,14 @@ export function initCreatePage(root: Document): void {
   const view: CreateView = {
     readSecret: () => secret.value,
     ttlSeconds: () => Number.parseInt(ttl.value, 10),
-    splitKey: () => splitKey?.checkbox.checked ?? false,
     clearSecret: () => {
       secret.value = '';
     },
     showLink: (url, shownKey) => {
       link.value = url;
-      if (splitKey) {
-        if (shownKey !== null) {
-          splitKey.value.value = shownKey;
-          splitKey.field.hidden = false;
-        } else {
-          splitKey.value.value = '';
-          splitKey.field.hidden = true;
-        }
+      if (keyField) {
+        keyField.value.value = shownKey ?? '';
+        keyField.field.hidden = shownKey === null;
       }
       error.hidden = true;
       result.hidden = false;
@@ -81,7 +74,7 @@ export function initCreatePage(root: Document): void {
 
   create.addEventListener('click', () => {
     create.disabled = true;
-    void runCreate(view, { origin: root.location.origin }).finally(() => {
+    void runCreate(view, { origin: root.location.origin, splitKey: !!keyField }).finally(() => {
       create.disabled = false;
     });
   });
@@ -90,7 +83,7 @@ export function initCreatePage(root: Document): void {
     void navigator.clipboard.writeText(link.value);
   });
 
-  splitKey?.copyButton.addEventListener('click', () => {
-    void navigator.clipboard.writeText(splitKey.value.value);
+  keyField?.copyButton.addEventListener('click', () => {
+    void navigator.clipboard.writeText(keyField.value.value);
   });
 }

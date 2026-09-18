@@ -2,11 +2,10 @@ using OneShot.Tests.Infrastructure;
 
 namespace OneShot.Tests;
 
-// Issue #77's split-channel key delivery is client-side and per-secret opt-in already, but an operator can
-// also turn the whole option off deployment-wide via Features:SplitKeyDelivery (task 57 follow-up), checked
-// once at startup. T1/T8/T9 hold identically either way — the key never touches the server regardless — so
-// this is a UI/config test, not a distinct security mitigation, matching LaunchSettingsTests' precedent for
-// an untagged test class.
+// Issue #77's split-channel key delivery is a deployment-wide default (Features:SplitKeyDelivery, task 57
+// follow-up), checked once at startup — not a per-secret UI choice. T1/T8/T9 hold identically either way — the
+// key never touches the server regardless — so this is a UI/config test, not a distinct security mitigation,
+// matching LaunchSettingsTests' precedent for an untagged test class.
 public sealed class FeatureFlagTests : IClassFixture<OneShotFactory>
 {
     private readonly OneShotFactory _factory;
@@ -20,7 +19,6 @@ public sealed class FeatureFlagTests : IClassFixture<OneShotFactory>
 
         var html = await client.GetStringAsync(new Uri("/", UriKind.Relative));
 
-        Assert.Contains("id=\"splitKey\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"keyField\"", html, StringComparison.Ordinal);
     }
 
@@ -44,7 +42,6 @@ public sealed class FeatureFlagTests : IClassFixture<OneShotFactory>
         var createHtml = await client.GetStringAsync(new Uri("/", UriKind.Relative));
         var revealHtml = await client.GetStringAsync(new Uri("/s/abcdefghijklmnopqrstuv", UriKind.Relative));
 
-        Assert.DoesNotContain("splitKey", createHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("keyField", createHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("keyEntry", revealHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("manualKey", revealHtml, StringComparison.Ordinal);

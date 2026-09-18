@@ -1,12 +1,16 @@
 import { expect, test } from '@playwright/test';
 
 import { baseURL } from '../playwright.config';
-import { createSecret, revealSecret } from '../support/oneshot';
+import { createSecret, requireClassicLink, revealSecret } from '../support/oneshot';
 
 // TransportTests shows the server redirects a plain-HTTP request before anything runs. This is the other half
 // of that story, and it is a browser behaviour the design depends on rather than one the app controls: the
 // fragment is never put on the wire, and it survives the upgrade so the recipient can still read the secret.
+// Entirely about fragment mechanics, so none of it applies under split-channel delivery (issue #77), where the
+// key never rides in any URL at all — a stronger property this file has nothing to add to.
 test.describe('[T8] the key rides in the fragment and never on the wire', () => {
+  test.beforeEach(() => requireClassicLink());
+
   test('the navigation that opens a reveal link carries no fragment', async ({ page }) => {
     const { link, fragment } = await createSecret(page, 'fragment-on-the-wire');
     expect(link).toContain('#');

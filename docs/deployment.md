@@ -150,11 +150,12 @@ security incident — but it is worth choosing deliberately rather than discover
 ## Feature Flags
 
 `FeatureOptions` (`src/OneShot.Web/FeatureOptions.cs`) holds the one feature currently gated deployment-wide:
-`SplitKeyDelivery` (default **on**), the opt-in on the create page that withholds the key from the link for
-delivery over a second channel (issue #77, plan task 57). Turn it off under the `Features` section
-(`Features__SplitKeyDelivery=false`) to remove the option — and the reveal page's matching manual key-entry
-prompt — from every page, deployment-wide, if a deployment would rather keep the single-link flow as the only
-one available (for example, a policy against manual key transcription). This is a UI toggle, not a security
+`SplitKeyDelivery` (default **on**), which withholds the key from every created secret's link so it can be
+delivered over a second channel instead (issue #77, plan task 57) — a deployment-wide default, not a
+per-secret choice; there is no create-page toggle. Turn it off under the `Features` section
+(`Features__SplitKeyDelivery=false`) to remove the create page's separate key field and the reveal page's
+matching manual key-entry prompt from every page, deployment-wide, reverting to a single fragment-carrying
+link for every secret (for example, a policy against manual key transcription). This is a UI toggle, not a security
 control: `T1` ("the server never sees the key") holds identically whether the flag is on or off, since the key
 never leaves the browser via either path.
 

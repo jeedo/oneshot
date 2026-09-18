@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { ClientBundlePath, createSecret } from '../support/oneshot';
+import { ClientBundlePath, createSecret, requireClassicLink } from '../support/oneshot';
 
 const PERMISSIONS_POLICY =
   'accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), ' +
@@ -35,7 +35,10 @@ test.describe('[T7] [T8] the real listener sends the hardening headers and nothi
   }
 });
 
+// Both tests here use the fragment itself as their control/evidence, so they need a real one to check.
 test.describe('[T7] the browser refuses a bundle that does not match its recorded digest', () => {
+  test.beforeEach(() => requireClassicLink());
+
   test('the untampered bundle runs: the reveal page strips the fragment', async ({ page }) => {
     const { link } = await createSecret(page, 'sri-control');
 

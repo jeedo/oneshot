@@ -11,13 +11,12 @@ interface Call {
   ttlSeconds: number;
 }
 
-function view(secret: string, ttlSeconds = 3600, splitKey = false) {
+function view(secret: string, ttlSeconds = 3600) {
   const events: string[] = [];
   let current = secret;
   const v: CreateView = {
     readSecret: () => current,
     ttlSeconds: () => ttlSeconds,
-    splitKey: () => splitKey,
     clearSecret: () => {
       current = '';
       events.push('clear');
@@ -112,14 +111,15 @@ describe('[T1] create flow', () => {
   });
 });
 
-// Issue #77: the opt-in that withholds the key from the link for split-channel delivery. Nothing about the
-// server request changes — only what the create page is handed to display.
+// Issue #77: a deployment-wide default (Features:SplitKeyDelivery) that withholds the key from the link for
+// split-channel delivery. Nothing about the server request changes — only what the create page is handed to
+// display, driven by CreateDeps.splitKey rather than a per-secret choice.
 describe('[T1] create flow — split-channel key', () => {
   it('shows a bare link and the raw key separately, and the key still decrypts the ciphertext that was sent', async () => {
-    const { v, events, secret } = view('my password', 900, true);
+    const { v, events, secret } = view('my password', 900);
     const { fn, calls } = api({ id: 'abcdefghijklmnopqrstuA', expiresAt: '2026-09-12T13:00:00Z' });
 
-    await runCreate(v, { origin: 'https://oneshot.example', api: fn });
+    await runCreate(v, { origin: 'https://oneshot.example', splitKey: true, api: fn });
 
     expect(events).toHaveLength(2);
     const [, link, key] = events[0]!.match(/^link:(.*)\|(.*)$/) ?? [];
@@ -134,10 +134,10 @@ describe('[T1] create flow — split-channel key', () => {
   });
 
   it('never posts the key, split or not', async () => {
-    const { v, events } = view('my password', 3600, true);
+    const { v, events } = view('my password', 3600);
     const { fn, calls } = api({ id: 'abcdefghijklmnopqrstuA', expiresAt: '2026-09-12T13:00:00Z' });
 
-    await runCreate(v, { origin: 'https://oneshot.example', api: fn });
+    await runCreate(v, { origin: 'https://oneshot.example', splitKey: true, api: fn });
 
     const key = events[0]!.slice(events[0]!.lastIndexOf('|') + 1);
     const request = JSON.stringify({ c: Array.from(calls[0]!.ciphertext), n: Array.from(calls[0]!.nonce) });

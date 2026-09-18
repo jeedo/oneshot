@@ -66,12 +66,12 @@ async function inspect(page: Page) {
 test.describe('[T7] revealed secret content is text, never markup', () => {
   for (const [name, payload] of Object.entries(payloads)) {
     test(`${name} round-trips as literal text and executes nothing`, async ({ page, browser }) => {
-      const { link } = await createSecret(page, payload);
+      const { link, key } = await createSecret(page, payload);
 
       const recipient = await browser.newContext();
       const recipientPage = await recipient.newPage();
       const seen = await watch(recipientPage);
-      await openRevealPage(recipientPage, link);
+      await openRevealPage(recipientPage, link, key);
 
       const shown = await revealSecret(recipientPage);
       const dom = await inspect(recipientPage);
@@ -95,12 +95,12 @@ test.describe('[T7] revealed secret content is text, never markup', () => {
     const payload = '<img src=x onerror=1>'.repeat(Math.ceil(MAX_PLAINTEXT_BYTES / 21)).slice(0, MAX_PLAINTEXT_BYTES);
     expect(new TextEncoder().encode(payload).length).toBe(MAX_PLAINTEXT_BYTES);
 
-    const { link } = await createSecret(page, payload);
+    const { link, key } = await createSecret(page, payload);
 
     const recipient = await browser.newContext();
     const recipientPage = await recipient.newPage();
     const seen = await watch(recipientPage);
-    await openRevealPage(recipientPage, link);
+    await openRevealPage(recipientPage, link, key);
 
     expect(await revealSecret(recipientPage)).toBe(payload);
     const dom = await inspect(recipientPage);
@@ -123,9 +123,9 @@ test.describe('[T7] revealed secret content is text, never markup', () => {
 // actually be reported, so these two prove the policy is live and the listener sees it.
 test.describe('[T7] the CSP blocks script the page did not ship with', () => {
   test('an inline script appended to the reveal page never runs', async ({ page }) => {
-    const { link } = await createSecret(page, 'csp-inline-control');
+    const { link, key } = await createSecret(page, 'csp-inline-control');
     const seen = await watch(page);
-    await openRevealPage(page, link);
+    await openRevealPage(page, link, key);
 
     await page.evaluate(() => {
       const script = document.createElement('script');
@@ -139,9 +139,9 @@ test.describe('[T7] the CSP blocks script the page did not ship with', () => {
   });
 
   test('a script element pointing at another origin never loads', async ({ page }) => {
-    const { link } = await createSecret(page, 'csp-external-control');
+    const { link, key } = await createSecret(page, 'csp-external-control');
     const seen = await watch(page);
-    await openRevealPage(page, link);
+    await openRevealPage(page, link, key);
 
     await page.evaluate(async () => {
       const script = document.createElement('script');

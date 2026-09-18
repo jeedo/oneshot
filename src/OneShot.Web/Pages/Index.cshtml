@@ -18,13 +18,6 @@
             <option value="604800">7 days</option>
         </select>
     </p>
-    @if (Features.Value.SplitKeyDelivery)
-    {
-        <p>
-            <label class="checkbox-label"><input type="checkbox" id="splitKey" /> Send the key separately (advanced)</label><br />
-            <small>Produces a bare link with no key attached, plus a separate key, so you can send them over two different channels &mdash; for example the link by chat, the key by email. Sending both the same way defeats the point.</small>
-        </p>
-    }
     <p>
         <button type="button" id="create">Create link</button>
     </p>

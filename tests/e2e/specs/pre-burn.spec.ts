@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { createSecret, openRevealPage, revealSecret } from '../support/oneshot';
+import { createSecret, openRevealPage, requireClassicLink, revealSecret, waitForRevealPageLoaded } from '../support/oneshot';
 
 // A gateway that merely fetches the link cannot burn it — but the dangerous case is one that runs the page's
 // JavaScript, since the page itself calls whoami and peek on load. Only a real browser proves that path.
@@ -33,8 +33,9 @@ test.describe('[T4] link scanners cannot pre-burn a secret', () => {
       const context = await browser.newContext({ userAgent: scanner.userAgent, extraHTTPHeaders: scanner.headers });
       const scannerPage = await context.newPage();
       await scannerPage.goto(link);
-      // Wait for the page's own load path to finish: it reaches the point where Reveal becomes available.
-      await expect(scannerPage.locator('#reveal')).toBeEnabled();
+      // Wait for the page's own load path to finish: it reaches the point where Reveal becomes available
+      // (classic) or the key prompt appears (split-channel delivery) — either way, still sealed.
+      await waitForRevealPageLoaded(scannerPage);
       await context.close();
 
       const peek = await request.get(`/api/secrets/${id}`);
@@ -45,54 +46,62 @@ test.describe('[T4] link scanners cannot pre-burn a secret', () => {
 
   test('a scanner visit does not stop the real recipient revealing afterwards', async ({ page, browser }) => {
     const secret = 'survives-the-scanner — ünïcödé';
-    const { link } = await createSecret(page, secret);
+    const { link, key } = await createSecret(page, secret);
 
     const scanner = await browser.newContext({ userAgent: scanners[0]!.userAgent });
     const scannerPage = await scanner.newPage();
     await scannerPage.goto(link);
-    await expect(scannerPage.locator('#reveal')).toBeEnabled();
+    await waitForRevealPageLoaded(scannerPage);
     await scanner.close();
 
     const recipient = await browser.newContext();
     const recipientPage = await recipient.newPage();
-    await openRevealPage(recipientPage, link);
+    await openRevealPage(recipientPage, link, key);
 
     expect(await revealSecret(recipientPage)).toBe(secret);
     await recipient.close();
   });
 
   test('only the explicit click consumes: the page load alone never does', async ({ page, request }) => {
-    const { link, id } = await createSecret(page, 'click-is-the-only-trigger');
+    const { link, id, key } = await createSecret(page, 'click-is-the-only-trigger');
 
     // Each visit re-runs the whole load path, including its whoami and peek calls.
     for (let i = 0; i < 4; i++) {
       await page.goto(link);
-      await expect(page.locator('#reveal')).toBeEnabled();
+      await waitForRevealPageLoaded(page);
     }
     expect((await (await request.get(`/api/secrets/${id}`)).json()).state).toBe('available');
 
+    // Split-channel delivery never auto-enables Reveal; the key still has to be supplied before the one click
+    // this test actually makes.
+    if (await page.locator('#keyEntry').isVisible()) {
+      await page.fill('#manualKey', key);
+    }
     await page.click('#reveal');
     await expect(page.locator('#result')).toBeVisible();
 
     expect((await (await request.get(`/api/secrets/${id}`)).json()).state).toBe('consumed');
   });
 
-  test('[T8] reloading after the fragment is stripped prompts for the key again, without burning the secret', async ({ page, request }) => {
+  test('[T8] reloading after the fragment is stripped loses the key without burning the secret', async ({ page, request }) => {
+    // Under split-channel delivery the link never carried a fragment in the first place — every visit,
+    // reload or not, already prompts for the key the same way, so there is no distinct "lost it on reload"
+    // moment to test there; split-key.spec.ts covers that flow's own key prompt.
+    requireClassicLink();
     const { link, id } = await createSecret(page, 'reload-loses-the-key');
 
     await page.goto(link);
     await expect(page.locator('#reveal')).toBeEnabled();
     expect(await page.evaluate(() => location.hash)).toBe('');
 
-    // The reload carries no fragment, because the page removed it from the address bar on first load. The
-    // reveal page cannot tell that apart from a link whose key was withheld on purpose for split-channel
-    // delivery (issue #77), so it prompts for the key again instead of erroring — either way, the secret
-    // itself stays untouched until a valid key is actually supplied.
+    // The reload carries no fragment, because the page removed it from the address bar on first load, and
+    // this deployment has no key-prompt markup to fall back on (Features:SplitKeyDelivery is off) — so it
+    // reads exactly like a malformed fragment: the same "this link is incomplete" error.
     await page.reload();
 
-    await expect(page.locator('#keyEntry')).toBeVisible();
-    await expect(page.locator('#error')).toBeHidden();
+    await expect(page.locator('#error')).toBeVisible();
     await expect(page.locator('#reveal')).toBeDisabled();
+    // The secret itself is untouched: the reader lost the key, nobody consumed anything.
     expect((await (await request.get(`/api/secrets/${id}`)).json()).state).toBe('available');
   });
 });

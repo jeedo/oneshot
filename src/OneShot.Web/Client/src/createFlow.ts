@@ -6,9 +6,6 @@ import { buildBareLink, buildShareLink } from './link';
 export interface CreateView {
   readSecret(): string;
   ttlSeconds(): number;
-  // Issue #77: opt-in, default off. When true, the key is withheld from the link (buildBareLink) and shown
-  // separately (showLink's second argument) instead of riding in the fragment (buildShareLink).
-  splitKey(): boolean;
   clearSecret(): void;
   showLink(link: string, key: string | null): void;
   showError(code: string): void;
@@ -16,6 +13,10 @@ export interface CreateView {
 
 export interface CreateDeps {
   origin: string;
+  // Issue #77: a deployment-wide default (Features:SplitKeyDelivery), not a per-secret choice. When true, the
+  // key is withheld from the link (buildBareLink) and shown separately (showLink's second argument) instead
+  // of riding in the fragment (buildShareLink).
+  splitKey?: boolean;
   api?: CreateSecretFn;
 }
 
@@ -38,7 +39,7 @@ export async function runCreate(view: CreateView, deps: CreateDeps): Promise<voi
   try {
     const ciphertext = await encrypt(plaintext, rawKey, nonce);
     const created = await (deps.api ?? createSecret)(ciphertext, nonce, view.ttlSeconds());
-    if (view.splitKey()) {
+    if (deps.splitKey) {
       view.showLink(buildBareLink(deps.origin, created.id), encode(rawKey));
     } else {
       view.showLink(buildShareLink(deps.origin, created.id, rawKey), null);

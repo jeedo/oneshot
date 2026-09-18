@@ -1,14 +1,15 @@
 import { expect, test } from '@playwright/test';
 
-import { baseURL } from '../playwright.config';
-
 // Kestrel's MaxRequestBodySize (128 KiB, task 5) is enforced by the listener, and TestServer does not have
 // one — so the in-process corpus in InputFuzzingTests reaches the decoder instead of the limit. Only a real
 // listener can show what an oversized body actually gets back.
 const LIMIT_BYTES = 128 * 1024;
 
+// A relative path resolves against the current project's own baseURL (this suite runs under two, one per
+// Features:SplitKeyDelivery setting, issue #77 follow-up) — this endpoint's behavior is unaffected by that
+// flag either way, so the same test body runs unchanged under both.
 async function post(request: import('@playwright/test').APIRequestContext, ciphertextChars: number) {
-  return request.post(`${baseURL}/api/secrets`, {
+  return request.post('/api/secrets', {
     headers: { 'Content-Type': 'application/json' },
     data: JSON.stringify({ ciphertext: 'A'.repeat(ciphertextChars), nonce: 'AAAAAAAAAAAAAAAA' }),
     failOnStatusCode: false,

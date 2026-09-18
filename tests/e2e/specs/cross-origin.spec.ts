@@ -3,7 +3,7 @@ import { type AddressInfo } from 'node:net';
 
 import { type Page, expect, test } from '@playwright/test';
 
-import { ATTACKER_HOST, baseURL } from '../playwright.config';
+import { ATTACKER_HOST } from '../playwright.config';
 import { createSecret, openRevealPage, revealSecret } from '../support/oneshot';
 
 // The attacker page has to be served for real: Chromium's Local Network Access refuses to let a page outside
@@ -27,21 +27,24 @@ test.afterAll(async () => {
   await new Promise((resolve) => server.close(resolve));
 });
 
-async function openAttackerPage(page: Page, body: string): Promise<void> {
+// appOrigin is the current project's own baseURL fixture, not the static config export: this suite runs
+// under two app instances, one per Features:SplitKeyDelivery setting (issue #77 follow-up), each on its own
+// port, and every absolute URL built here has to point at whichever one is actually running.
+async function openAttackerPage(page: Page, body: string, appOrigin: string): Promise<void> {
   attackerHtml = body;
   await page.goto(`${attackerOrigin}/csrf.html`);
   // If this ever became the app's own origin the whole file would be testing nothing.
   expect(new URL(page.url()).origin).toBe(attackerOrigin);
-  expect(new URL(page.url()).origin).not.toBe(baseURL);
+  expect(new URL(page.url()).origin).not.toBe(appOrigin);
 }
 
-async function peekState(page: Page, id: string): Promise<string> {
-  const response = await page.request.get(`${baseURL}/api/secrets/${id}`);
+async function peekState(page: Page, id: string, appOrigin: string): Promise<string> {
+  const response = await page.request.get(`${appOrigin}/api/secrets/${id}`);
   return (await response.json()).state;
 }
 
 test.describe('[T4] a foreign origin cannot reach the consume path', () => {
-  test('a cross-site form submission is refused for every enctype a form can produce', async ({ page }) => {
+  test('a cross-site form submission is refused for every enctype a form can produce', async ({ page, baseURL }) => {
     const { id } = await createSecret(page, 'csrf-form-target');
     const revealUrl = `${baseURL}/api/secrets/${id}/reveal`;
     // These three are the whole of what an HTML form can send. None is application/json, and a form can set
@@ -59,6 +62,7 @@ test.describe('[T4] a foreign origin cannot reach the consume path', () => {
         </form>`,
         )
         .join(''),
+      baseURL!,
     );
 
     const statuses: number[] = [];
@@ -77,13 +81,13 @@ test.describe('[T4] a foreign origin cannot reach the consume path', () => {
     // The submissions really are sent and really do reach the app: it refuses them, the browser does not.
     await expect.poll(() => statuses.length).toBe(enctypes.length);
     expect(statuses).toEqual(enctypes.map(() => 403));
-    expect(await peekState(page, id)).toBe('available');
+    expect(await peekState(page, id, baseURL!)).toBe('available');
   });
 
-  test('a no-cors fetch reaches the app, is refused, and tells the attacker nothing', async ({ page }) => {
+  test('a no-cors fetch reaches the app, is refused, and tells the attacker nothing', async ({ page, baseURL }) => {
     const { id } = await createSecret(page, 'no-cors-target');
     const revealUrl = `${baseURL}/api/secrets/${id}/reveal`;
-    await openAttackerPage(page, '');
+    await openAttackerPage(page, '', baseURL!);
 
     let failure = '';
     page.on('requestfailed', (request) => {
@@ -115,13 +119,13 @@ test.describe('[T4] a foreign origin cannot reach the consume path', () => {
     expect(outcome.threw).toBe(true);
     expect(outcome.message).toContain('Failed to fetch');
     await expect.poll(() => failure).toBe('net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin');
-    expect(await peekState(page, id)).toBe('available');
+    expect(await peekState(page, id, baseURL!)).toBe('available');
   });
 
-  test('a cors fetch carrying the reveal header dies at the preflight and never sends the POST', async ({ page }) => {
+  test('a cors fetch carrying the reveal header dies at the preflight and never sends the POST', async ({ page, baseURL }) => {
     const { id } = await createSecret(page, 'preflight-target');
     const revealUrl = `${baseURL}/api/secrets/${id}/reveal`;
-    await openAttackerPage(page, '');
+    await openAttackerPage(page, '', baseURL!);
 
     const answered: number[] = [];
     const failed: string[] = [];
@@ -155,13 +159,13 @@ test.describe('[T4] a foreign origin cannot reach the consume path', () => {
     expect(outcome).toBe('rejected TypeError');
     await expect.poll(() => failed).toEqual(['net::ERR_FAILED']);
     expect(answered).toEqual([]);
-    expect(await peekState(page, id)).toBe('available');
+    expect(await peekState(page, id, baseURL!)).toBe('available');
   });
 
-  test('cross-origin GETs of the peek endpoint burn nothing and leak nothing', async ({ page }) => {
+  test('cross-origin GETs of the peek endpoint burn nothing and leak nothing', async ({ page, baseURL }) => {
     const { id } = await createSecret(page, 'cross-origin-get-target');
     const peekUrl = `${baseURL}/api/secrets/${id}`;
-    await openAttackerPage(page, `<img src="${peekUrl}" alt="" /><script src="${peekUrl}"></script>`);
+    await openAttackerPage(page, `<img src="${peekUrl}" alt="" /><script src="${peekUrl}"></script>`, baseURL!);
 
     // Cross-Origin-Resource-Policy: same-origin (T8, issue #50) blocks both now: a plain no-cors fetch used
     // to resolve opaquely (the body hidden but the promise still fulfilled), and it no longer does either —
@@ -180,17 +184,18 @@ test.describe('[T4] a foreign origin cannot reach the consume path', () => {
 
     expect(outcome.noCors).toBe('rejected TypeError');
     expect(outcome.cors).toBe('rejected TypeError');
-    expect(await peekState(page, id)).toBe('available');
+    expect(await peekState(page, id, baseURL!)).toBe('available');
   });
 
-  test('after every cross-origin attempt the real recipient still reveals the secret', async ({ page, browser }) => {
+  test('after every cross-origin attempt the real recipient still reveals the secret', async ({ page, browser, baseURL }) => {
     const plaintext = 'survives-csrf — ünïcödé';
-    const { link, id } = await createSecret(page, plaintext);
+    const { link, key, id } = await createSecret(page, plaintext);
     const revealUrl = `${baseURL}/api/secrets/${id}/reveal`;
     await openAttackerPage(
       page,
       `<iframe name="sink" style="display:none"></iframe>
        <form id="f" method="POST" action="${revealUrl}" enctype="text/plain" target="sink"></form>`,
+      baseURL!,
     );
 
     await page.evaluate(async (url) => {
@@ -199,12 +204,12 @@ test.describe('[T4] a foreign origin cannot reach the consume path', () => {
       // attempt is a no-op either way, which is all this test cares about.
       await fetch(url, { method: 'POST', mode: 'no-cors', body: '{}' }).catch(() => {});
     }, revealUrl);
-    await expect.poll(() => peekState(page, id)).toBe('available');
+    await expect.poll(() => peekState(page, id, baseURL!)).toBe('available');
 
     // The attacks were no-ops, not near-misses on something already spent: the secret is still whole.
     const recipient = await browser.newContext();
     const recipientPage = await recipient.newPage();
-    await openRevealPage(recipientPage, link);
+    await openRevealPage(recipientPage, link, key);
     expect(await revealSecret(recipientPage)).toBe(plaintext);
     await recipient.close();
   });

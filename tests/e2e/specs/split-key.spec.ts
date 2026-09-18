@@ -1,9 +1,14 @@
 import { type Page, expect, test } from '@playwright/test';
 
-// Issue #77: an opt-in that withholds the key from the link so the link and key can be sent over two
-// different channels. This is the end-to-end proof that the two halves the unit/vitest suites cover in
-// isolation (link.test.ts, createFlow.test.ts, revealFlow.test.ts) actually fit together in a browser: a real
-// bare link, a real manually-typed key, and a real decrypt.
+import { requireSplitKeyDelivery } from '../support/oneshot';
+
+// Issue #77: split-channel key delivery. Once Features:SplitKeyDelivery is on (task 57 follow-up: a
+// deployment-wide default, not a per-secret UI choice — there is no opt-in control any more), every secret
+// created here withholds the key from the link so the link and key can be sent over two different channels.
+// This is the end-to-end proof that the two halves the unit/vitest suites cover in isolation (link.test.ts,
+// createFlow.test.ts, revealFlow.test.ts) actually fit together in a browser: a real bare link, a real
+// manually-typed key, and a real decrypt. This spec runs only under the split-key project — see
+// playwright.config.ts and support/oneshot.ts's requireSplitKeyDelivery.
 const SECRET = 'sent-over-two-channels — ünïcödé ✓';
 
 async function readClipboard(page: Page): Promise<string> {
@@ -11,7 +16,9 @@ async function readClipboard(page: Page): Promise<string> {
 }
 
 test.describe('[T1] [T8] [T9] split-channel key delivery', () => {
-  test('create with the split-key option produces a bare link and a separate key, and the recipient can reveal by typing it in', async ({
+  test.beforeEach(() => requireSplitKeyDelivery());
+
+  test('create produces a bare link and a separate key by default, and the recipient can reveal by typing it in', async ({
     page,
     browser,
   }) => {
@@ -20,7 +27,6 @@ test.describe('[T1] [T8] [T9] split-channel key delivery', () => {
 
     await sharerPage.goto('/');
     await sharerPage.fill('#secret', SECRET);
-    await sharerPage.check('#splitKey');
     await sharerPage.click('#create');
     await expect(sharerPage.locator('#result')).toBeVisible();
 
@@ -58,16 +64,6 @@ test.describe('[T1] [T8] [T9] split-channel key delivery', () => {
     await expect(recipientPage.locator('#result')).toBeVisible();
     expect(await recipientPage.textContent('#plaintext')).toBe(SECRET);
     await recipient.close();
-  });
-
-  test('without the split-key option the link still carries the key in the fragment, as before', async ({ page }) => {
-    await page.goto('/');
-    await page.fill('#secret', 'unsplit-secret');
-    await page.click('#create');
-    await expect(page.locator('#result')).toBeVisible();
-
-    expect(await page.inputValue('#link')).toContain('#');
-    await expect(page.locator('#keyField')).toBeHidden();
   });
 
   test('an unknown id with no fragment shows the unknown state, not a key prompt', async ({ page }) => {

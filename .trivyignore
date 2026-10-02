@@ -1,0 +1,9 @@
+# Reviewed Trivy suppressions (T14). Each entry needs a reason and an expiry (`exp:`); Trivy stops honouring an
+# entry after that date, so the gate comes back on its own. Record every entry in docs/threat-model.md
+# ("Vulnerability Scan Suppressions").
+
+# openssl / libssl3t64 3.0.13-0ubuntu3.15 in mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled — information
+# disclosure via DTLS handshake retransmission. OneShot serves HTTP/HTTPS over Kestrel and never speaks DTLS, so the
+# vulnerable path is not reachable. Fixed in 3.0.13-0ubuntu3.16, but Microsoft has not yet republished the base
+# image (the tag still resolves to the digest pinned in Containerfile). Remove when Dependabot bumps that digest.
+CVE-2026-84782 exp:2026-10-16

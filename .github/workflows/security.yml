@@ -251,6 +251,7 @@ jobs:
           format: table
           severity: HIGH,CRITICAL
           exit-code: '1'
+          trivyignores: .trivyignore
 
       - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:

@@ -253,3 +253,12 @@ code and recorded here.
 | Rule | Location | Justification |
 |------|----------|---------------|
 | CA5398 (avoid hard-coded `SslProtocols`) | `src/OneShot.Web/Security/KestrelHardening.cs` `ConfigureHttps`; `tests/OneShot.Tests/KestrelHardeningTests.cs` `ConfigureHttps_AllowsOnlyTls12AndTls13` | The rule prefers `SslProtocols.None` so the OS picks versions, but an OS default can still admit TLS 1.0/1.1 on older hosts. T8 requires a TLS 1.2+ floor, so `Tls12 \| Tls13` is pinned explicitly and the test names the same values to lock it in. Revisit when TLS 1.4 or a deprecation of TLS 1.2 warrants a change. |
+
+## Vulnerability Scan Suppressions
+
+Trivy (`Container (build, Trivy, SBOM)`, T14) fails the build on any HIGH or CRITICAL finding in the shipped image.
+Each suppression lives in `.trivyignore` with a reason and an `exp:` date, so it lapses on its own, and is recorded here.
+
+| Finding | Expires | Justification |
+|---------|---------|---------------|
+| CVE-2026-84782 (`openssl`, `libssl3t64` 3.0.13-0ubuntu3.15) | 2026-10-16 | Information disclosure via DTLS handshake retransmission. The app uses Kestrel over HTTP/TLS only and never speaks DTLS, so the path is unreachable. The fix (3.0.13-0ubuntu3.16) is not yet in the chiseled base image, which has no package manager to patch it. Remove the entry when Dependabot bumps the `Containerfile` base digest to an image that carries the fix. |

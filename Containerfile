@@ -43,7 +43,7 @@ RUN dotnet publish src/OneShot.Web/OneShot.Web.csproj \
     --output /app/publish \
     -p:DebugType=none
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:9651fa59abcdf177c30392cb44a820605ca5d618429ab37acbf6e7c644510b02 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:48e51f2f6798897be7ac4e775c049ed8fe60d3190f637e1f9c9dc7513efa659c AS final
 
 WORKDIR /app
 COPY --from=build /app/publish .

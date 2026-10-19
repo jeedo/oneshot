@@ -11,7 +11,7 @@
 # `docker run --read-only` (a tmpfs /tmp covers whatever transient scratch space the runtime wants) — nothing
 # here needs to write to its own filesystem, so nothing is lost by refusing to let it.
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa AS build
 
 # The client bundle build (Client/package.json, plan task 21) needs Node, which the SDK image does not ship.
 # The signing key is fetched and verified by checksum rather than piped into a shell — the same reasoning

@@ -4,17 +4,17 @@
     "net10.0": {
       "Microsoft.AspNetCore.Authentication.Negotiate": {
         "type": "Direct",
-        "requested": "[10.0.14, )",
-        "resolved": "10.0.14",
-        "contentHash": "Cdx0gV3t2+0lCdvFRvze2PtZT6K1BDAZWMQGE/ROkPqPsL1wnw3qnXKdEWG6iSEQShvjrvqv2ReUE4OWTTMFVA==",
+        "requested": "[10.0.15, )",
+        "resolved": "10.0.15",
+        "contentHash": "Ad0FPDA51rcC4kIXdq7ZrWQyaEMbRKUCMD188LoM4XPPCxJFONZdmOY88Nvn7Pa63Os8XW9J70OKzyUU7SUkQw==",
         "dependencies": {
-          "System.DirectoryServices.Protocols": "10.0.14"
+          "System.DirectoryServices.Protocols": "10.0.15"
         }
       },
       "System.DirectoryServices.Protocols": {
         "type": "Transitive",
-        "resolved": "10.0.14",
-        "contentHash": "uZAVEVyWAhQxtKIIoNYCzbtKhcIMHjY0viEbmkfpTZ9O/4fzOTlYHUAqirOL8anzBmSAx8xOk7o7R86mBgTfzQ=="
+        "resolved": "10.0.15",
+        "contentHash": "VEiti20nQKFx5SjmlxaLJ3mPpDInxH6D2J2jislLF1pmp3aKyrh87E/pqczt1P9f0Pdc5QbpySnEJcniDKjmCg=="
       }
     }
   }
